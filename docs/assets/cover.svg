@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="480" viewBox="0 0 1600 480" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">FitTrack · 轻衡</title>
+  <desc id="desc">记录每一天，看见长期的改变。本地优先的饮食、训练与身体记录。</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1600" y2="480" gradientUnits="userSpaceOnUse"><stop stop-color="#FBFAF4"/><stop offset="1" stop-color="#EEF2E5"/></linearGradient>
+    <linearGradient id="forest" x1="1070" y1="0" x2="1500" y2="480" gradientUnits="userSpaceOnUse"><stop stop-color="#1D5A46"/><stop offset="1" stop-color="#103E32"/></linearGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M42 0H0V42" stroke="#D7E0CF" stroke-opacity=".4"/></pattern>
+    <clipPath id="round"><rect width="1600" height="480" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect width="1600" height="480" fill="url(#paper)"/>
+    <rect x="970" width="630" height="480" fill="url(#grid)"/>
+    <path d="M1210-70C1375-70 1664 5 1664 260V530H1228C1104 530 1040 442 1040 310V120C1040 7 1118-70 1210-70Z" fill="url(#forest)"/>
+    <rect x="72" y="66" width="56" height="56" rx="17" fill="#E5ECD9"/>
+    <path d="M111 78C93 78 84 86 85 98c1 9 10 12 17 7 9-6 10-16 9-27Z" fill="#19553F"/><path d="M87 107 106 85" stroke="#E5ECD9" stroke-width="2.6" stroke-linecap="round"/>
+    <text x="147" y="92" fill="#41614F" font-family="Arial,sans-serif" font-size="17" letter-spacing="4">PERSONAL HEALTH JOURNAL</text>
+    <text x="72" y="242" fill="#164D3B" font-family="Georgia,'Times New Roman',serif" font-size="120" letter-spacing="-5">FitTrack</text>
+    <path d="M557 166V242" stroke="#B4C4A7" stroke-width="1.4"/>
+    <text x="589" y="227" fill="#44614B" font-family="'Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="48" letter-spacing="10">轻衡</text>
+    <text x="77" y="312" fill="#284C3B" font-family="'Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="30" letter-spacing="2">记录每一天。看见长期的改变。</text>
+    <path d="M76 378H117" stroke="#91A77F" stroke-width="2"/>
+    <text x="133" y="384" fill="#79896E" font-family="Arial,sans-serif" font-size="14" letter-spacing="3">YOUR DATA. YOUR PACE.</text>
+    <circle cx="1330" cy="221" r="137" stroke="#537B5A" stroke-opacity=".35"/>
+    <circle cx="1330" cy="221" r="106" stroke="#76916D" stroke-opacity=".45"/>
+    <circle cx="1330" cy="221" r="74" stroke="#89A87B" stroke-width="10" stroke-opacity=".25"/>
+    <path d="M1330 147a74 74 0 1 1-69 101" stroke="#DCE6BF" stroke-width="10" stroke-linecap="round"/>
+    <path d="m1298 224 22 22 44-49" stroke="#E4ECCF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1330" y="400" text-anchor="middle" fill="#CBD9BD" font-family="Arial,sans-serif" font-size="13" letter-spacing="4">NOURISH · MOVE · GROW</text>
+  </g>
+</svg>

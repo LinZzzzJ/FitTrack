@@ -1,0 +1,165 @@
+from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class Model(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class Credentials(Model):
+    username: str = Field(min_length=2, max_length=40)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class Profile(Model):
+    effective_date: date
+    height_cm: float = Field(ge=90, le=240)
+    initial_weight_kg: float = Field(ge=20, le=350)
+    body_fat_pct: float | None = Field(None, gt=0, le=70)
+    sex: Literal["male", "female", "other"] = "male"
+    resting_kcal: float = Field(ge=500, le=5000)
+    activity_factor: float = Field(1.2, ge=1, le=2.5)
+    target_weight_kg: float | None = Field(None, ge=20, le=350)
+    calorie_target: float | None = Field(None, gt=0, le=10000)
+    protein_target_g: float | None = Field(None, gt=0, le=1000)
+    carbs_target_g: float | None = Field(None, gt=0, le=2000)
+    fat_target_g: float | None = Field(None, gt=0, le=1000)
+
+
+class BodyRecord(Model):
+    date: date
+    weight_kg: float | None = Field(None, ge=20, le=350)
+    body_fat_pct: float | None = Field(None, gt=0, le=70)
+    resting_kcal: float | None = Field(None, ge=500, le=5000)
+    note: str = Field("", max_length=1000)
+
+
+class FoodItem(Model):
+    name: str = Field(min_length=1, max_length=100)
+    consumed_part: str = Field("", max_length=300)
+    estimated_edible_grams: float = Field(ge=0, le=10000)
+    kcal: float = Field(ge=0, le=20000)
+    protein_g: float = Field(ge=0, le=2000)
+    carbs_g: float = Field(ge=0, le=5000)
+    fat_g: float = Field(ge=0, le=2000)
+
+
+class LabelReadout(Model):
+    name: str | None = Field(None, max_length=100)
+    basis_kind: Literal["per_100g", "per_serving", "per_pack"] | None = None
+    basis_grams: float | None = Field(None, gt=0, le=10000)
+    energy_value: float | None = Field(None, ge=0, le=100000)
+    energy_unit: Literal["kJ", "kcal"] | None = None
+    protein_g: float | None = Field(None, ge=0, le=2000)
+    carbs_g: float | None = Field(None, ge=0, le=5000)
+    fat_g: float | None = Field(None, ge=0, le=2000)
+    assumptions: list[str] = Field(default_factory=list, max_length=20)
+
+
+class LabelPortion(Model):
+    mode: Literal["grams", "packs"] = "grams"
+    grams: float | None = Field(None, gt=0, le=10000)
+    pack_grams: float | None = Field(None, gt=0, le=10000)
+    packs: float | None = Field(None, gt=0, le=1000)
+
+
+class NutritionLabel(Model):
+    label: LabelReadout
+    portion: LabelPortion
+
+
+class Meal(Model):
+    date: date
+    slot: Literal["breakfast", "lunch", "dinner", "snack"] = "lunch"
+    title: str = Field("", max_length=100)
+    note: str = Field("", max_length=2000)
+    assumptions: list[str] = Field(default_factory=list, max_length=20)
+    items: list[FoodItem] = Field(min_length=1, max_length=50)
+    image_id: str | None = None
+    source_job_id: str | None = None
+    nutrition_label: NutritionLabel | None = None
+
+
+class TrainingSet(Model):
+    reps: int = Field(ge=1, le=1000)
+    weight_kg: float = Field(0, ge=0, le=1000)
+
+
+class Exercise(Model):
+    name: str = Field(min_length=1, max_length=100)
+    sets: list[TrainingSet] = Field(min_length=1, max_length=50)
+
+
+class Workout(Model):
+    date: date
+    title: str = Field(min_length=1, max_length=100)
+    kind: Literal["strength", "cardio"] = "strength"
+    activity: str = Field("strength", max_length=100)
+    duration_minutes: float = Field(gt=0, le=1440)
+    intensity: Literal["light", "moderate", "vigorous"] = "moderate"
+    met: float | None = Field(None, ge=1, le=25)
+    net_kcal_override: float | None = Field(None, ge=0, le=10000)
+    exercises: list[Exercise] = Field(default_factory=list, max_length=30)
+    note: str = Field("", max_length=2000)
+    plan_id: str | None = None
+    ai_estimate_job_id: str | None = None
+
+
+class TrainingPlan(Model):
+    date: date
+    title: str = Field(min_length=1, max_length=100)
+    kind: Literal["strength", "cardio"] = "strength"
+    activity: str = Field("strength", max_length=100)
+    duration_minutes: float = Field(45, gt=0, le=1440)
+    intensity: Literal["light", "moderate", "vigorous"] = "moderate"
+    status: Literal["planned", "skipped"] = "planned"
+    note: str = Field("", max_length=2000)
+
+
+class GoalProfile(Profile):
+    target_weight_kg: float = Field(ge=20, le=350)
+
+
+class CardioInput(Model):
+    kind: Literal["cardio"] = "cardio"
+    activity: str = Field(min_length=1, max_length=100)
+    duration_minutes: float = Field(gt=0, le=1440)
+    intensity: Literal["light", "moderate", "vigorous"] = "moderate"
+    description: str = Field("", max_length=2000)
+
+
+class JobRequest(Model):
+    kind: Literal["meal", "feedback", "goals", "cardio_estimate", "weekly_review"]
+    date: date
+    image_id: str | None = None
+    note: str = Field("", max_length=2000)
+    slot: Literal["breakfast", "lunch", "dinner", "snack"] = "lunch"
+    request_key: str = Field(min_length=8, max_length=100)
+    goal_profile: GoalProfile | None = None
+    cardio_input: CardioInput | None = None
+    week_start: date | None = None
+    meal_mode: Literal["photo", "label"] = "photo"
+
+    @model_validator(mode="after")
+    def validate_goal_input(self):
+        if self.kind == "goals" and self.goal_profile is None:
+            raise ValueError("生成目标需要身体资料和目标体重")
+        if self.kind != "goals" and self.goal_profile is not None:
+            raise ValueError("此任务不能包含目标生成资料")
+        if (self.kind == "cardio_estimate") != (self.cardio_input is not None):
+            raise ValueError("有氧估算任务必须且仅能包含有氧资料")
+        if (self.kind == "weekly_review") != (self.week_start is not None):
+            raise ValueError("每周复盘任务必须且仅能包含周起始日期")
+        if self.kind != "meal" and self.meal_mode != "photo":
+            raise ValueError("标签模式仅用于餐食任务")
+        return self
+
+
+class AISettings(Model):
+    api_key: str | None = Field(None, max_length=500)
+    base_url: str | None = Field(None, max_length=500)
+    vision_model: str | None = Field(None, min_length=1, max_length=100)
+    coach_model: str | None = Field(None, min_length=1, max_length=100)
+    remember: bool | None = None

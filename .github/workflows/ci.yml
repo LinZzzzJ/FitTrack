@@ -1,0 +1,45 @@
+name: Offline checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Prepare controlled test directories
+        run: |
+          $root = Join-Path $env:GITHUB_WORKSPACE 'artifacts/ci'
+          New-Item -ItemType Directory -Force -Path "$root/tmp","$root/caches" | Out-Null
+          "TMP=$root/tmp" >> $env:GITHUB_ENV
+          "TEMP=$root/tmp" >> $env:GITHUB_ENV
+          "PIP_CACHE_DIR=$root/caches/pip" >> $env:GITHUB_ENV
+          "RUFF_CACHE_DIR=$root/caches/ruff" >> $env:GITHUB_ENV
+          "npm_config_cache=$root/caches/npm" >> $env:GITHUB_ENV
+          'PYTHONDONTWRITEBYTECODE=1' >> $env:GITHUB_ENV
+      - name: Install locked Python dependencies
+        run: |
+          pip install --no-compile -r requirements.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pip install --no-compile -e '.[dev]'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Backend tests
+        run: python -B -m pytest --basetemp artifacts/ci/pytest -o cache_dir=artifacts/ci/caches/pytest
+      - name: Backend lint
+        run: python -B -m ruff check src tests scripts
+      - run: npm --prefix web ci
+      - run: npm --prefix web run check
+      - run: npm --prefix web run build

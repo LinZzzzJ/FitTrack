@@ -128,6 +128,20 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 
 详细说明：[使用与开发指南](README.zh-CN.md) · [架构](docs/ARCHITECTURE.md) · [公开验收记录](docs/ACCEPTANCE.md) · [服务器路线](docs/WEB_DEPLOYMENT_ASSESSMENT.md)
 
+## 项目知识库与跨平台开发
+
+准备接手开发或迁移到 Ubuntu/WSL，可从 [当前状态](docs/current_status.md) 开始，再按任务阅读专题。知识库保留实现依据、设计原因和故障经验，区分已验证能力与待实现方向。
+
+| 想了解什么 | 文档入口 |
+| :--- | :--- |
+| 现在做到哪里、下一步从哪开始 | [当前状态](docs/current_status.md) · [AI 开发指南](AGENTS.md) |
+| 架构、数据流和接口 | [系统架构](docs/ARCHITECTURE.md) · [接口与数据格式](docs/interfaces.md) |
+| 需求与技术选择的原因 | [需求映射](docs/requirements.md) · [技术决策](docs/decisions.md) |
+| Windows/WSL 环境和移植工作 | [开发环境](docs/environment.md) · [跨平台移植清单](docs/migration.md) |
+| 历史故障、上下文与未解问题 | [开发经验](docs/development_notes.md) · [历史摘要](docs/history_summary.md) · [待确认问题](docs/open_questions.md) |
+
+当前完整验收与发布仍以 Windows 为准。WSL 编辑开发、Linux 运行服务、Windows 成品打包是不同流程；已有移植说明不代表 Linux 已完整适配。Git 仓库保存源码与文档，个人健康数据和 Key 需单独备份迁移。
+
 ## 版本与边界
 
 - v0.4.0 为 Windows 本机便携版，已在 Windows 11 x64 验收；Windows 10 为兼容目标，尚未实机验证。EXE 未签名。

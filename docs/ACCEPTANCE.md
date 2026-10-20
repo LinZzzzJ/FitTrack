@@ -33,3 +33,11 @@
 ## 已知边界
 
 Windows10为兼容目标，尚未在其他PC或纯净虚拟机实测；清理开发工具PATH不等同于纯净电脑验收。主EXE未签名。AI识图和运动消耗存在估计误差，需人工确认。公网部署和Linux实机验证不属于本次便携版交付。
+
+## 2026-10-20 知识库整理复验
+
+在独立公开源码工作区执行既有 `scripts/check.ps1`：Windows、Python3.12.7、129项pytest全部通过；Ruff通过；Svelte/TypeScript为0错误、0警告；Vite生产构建成功。全部自动AI使用模拟接口，没有调用个人Key、读取正式健康库或操作正式服务。
+
+此次变更新增9份专题文档、完善6份已有文档，应用版本保持v0.4.0/API修订号2，不生成或替换Release附件。101个已跟踪非Markdown文件的前后SHA-256一致；133个相对链接与路径大小写检查通过，敏感Key/令牌/私钥/私人路径及邮箱形态扫描无命中，并人工复核公开内容和事实字段。README、AGENTS、接口与移植四份文档通过GitHub Markdown API渲染检查，标题与表格正常；未为此次文档改动重跑浏览器业务或Linux验证。检查产物仅保存在忽略的 `artifacts/knowledge-check`。
+
+只读探测WSL及工具归属，不安装Linux依赖、不修改WSL配置，不将其计为Linux测试通过。Linux候选命令、已确认平台依赖和未解问题均在[环境](environment.md)、[移植](migration.md)与[问题清单](open_questions.md)中明确标注。

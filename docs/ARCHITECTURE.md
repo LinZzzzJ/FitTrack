@@ -1,5 +1,30 @@
 # 架构与计算
 
+本文描述公开 v0.4.0 的实现，知识核对日期为2026-10-20。先读 [当前状态](current_status.md) 判断版本与验证范围；字段合约见 [interfaces](interfaces.md)，设计原因见 [decisions](decisions.md)，平台依赖见 [migration](migration.md)。已有功能不代表 Linux/公网已经验收。
+
+## 总体关系与入口
+
+```mermaid
+flowchart LR
+    UI["浏览器：Svelte 页面"] -->|"同源 /api"| HTTP["FastAPI 路由与访问保护"]
+    UI -->|"SSE 进度"| EVENTS["EventBus：按账号通知"]
+    HTTP --> HUB["WorkspaceHub：账号归属与分派"]
+    HUB --> CONTROL["控制库：账号、会话、目录映射"]
+    HUB --> PERSONAL["个人库与原图"]
+    HTTP --> CALC["计算、标签换算与周资格"]
+    HTTP --> JOBS["JobRunner：持久化任务 + 线程池"]
+    VAULT["CredentialStore：个人加密/会话凭据"] --> JOBS
+    JOBS --> AI["AIClient：提供方接口与输出校验"]
+    JOBS --> PERSONAL
+    JOBS --> EVENTS
+    HTTP --> OPS["StorageOperations：备份/恢复/迁移"]
+    OPS --> HUB
+```
+
+`__main__` 调用 `cli.main`，验证用户明确指定/选择的根目录，再配置进程临时目录与日志、获取实例锁、构造 `WorkspaceHub` 和 `CredentialStore`，由 `create_app` 建立路由、任务和 SSE，Uvicorn 提供服务。CLI 持有正常停服/根迁移回调；直接构造应用不自动获得全部进程管理能力。
+
+文件职责是单向分层而不是多套独立应用：前端调用合约，路由读取会话归属，存储负责事务，计算不请求 AI；AI 提供可验证草稿，正式记录仍经保存接口写入。
+
 ## 工程组织
 
 前端为 Svelte 5、TypeScript、Vite 单页应用，六个功能页面共用日期、账号与每日摘要状态。图表使用 ECharts，组件挂载和卸载时管理实例与 ResizeObserver；弹窗使用原生 dialog。
@@ -74,7 +99,7 @@ AI 输出经 Pydantic 验证正数、上限和供能一致性，三大营养素�
 
 识图副本在内存中纠正 EXIF 方向、转 RGB 并去除元数据，长边最多 4096 px，不放大小图；JPEG 质量 92、保留完整色度，超过 8 MiB 时继续等比缩小。全程不裁边、不覆盖本地原图，仍以 Base64 和 detail=high 发送，不需要公开图片网址。较此前 1600 px/质量85策略保留更多输入细节，可能增加传输量；[DeepSeek 仍会按内部规则等比缩放](https://api-docs.deepseek.com/zh-cn/guides/vision/)，不保证小字和反光标签可准确识别。图片上传限制仍为 12 MB / 4000 万像素。
 
-包装食品提示区分每100克/每份/整包，按实际重量缩放，标签 kJ 除以 4.184 换算 kcal；NRV 不当作克数，每袋重量不静默等同食用袋数。模型仍须返回完整数字字段，不以零填充未知营养，不放宽有限数值或必填校验。验证失败只显示固定字段名和安全的错误类型，不回传原始模型值、未知字段名或服务响应；照片和描述仍可用于重试与手动补录。旧失败任务未保存具体 ValidationError，不能还原其确切缺失字段。
+包装食品提示区分每100克/每份/整包，按实际重量缩放，标签 kJ 除以 4.184 换算 kcal；NRV 不当作克数，每袋重量不静默等同食用袋数。普通照片 `FoodItem` 仍要求完整数字字段；v0.3起独立标签模式的 `LabelReadout` 允许未知值为空，待用户补齐后再由 `nutrition.label_food` 做确定性换算和确认。两种模式均不以零填未知值，不放宽有限数值校验。验证失败只显示安全字段诊断，不回传原始模型值、未知字段名或服务响应；照片和描述仍可用于重试与手动补录。旧失败任务未保存具体 ValidationError，不能还原其确切缺失字段。
 
 反馈使用当日及此前六天的资料、身体测量、已确认饮食和实际训练，以及今日/次日排期，不包含用户名、密码或密钥。请求前保存数据指纹，修改、补录或生成期间变化时标记过期，不覆盖用户记录。普通编辑不调用 AI。
 
@@ -144,3 +169,19 @@ distribution模块统一源码/冻结程序安装路径、资源和自身重启�
 源码版保留源码指纹检查；冻结版依据随包build-info.json检查加载身份，API修订号仍为2，新增distribution与build_id。构建清单含版本、运行时版本、后端指纹、前端文件哈希及打包配置/依赖锁哈希，无数据路径或凭据。文件清单对包内文件逐一记录体积和SHA-256，压缩包另附总校验文件。
 
 prepare_release.ps1下载固定官方ZIP并核对SHA-256，不注册全局Python。build_release.py负责构建、收集Python及前后端第三方许可、归档和体积统计；audit_release.py核验最终ZIP。check_portable_release.py以移除开发工具路径的子进程环境启动实际解压EXE，验证原生对话框、功能、备份、迁移和重启；check_portable_ui.py用独立Edge配置检查实际成品界面及离线说明。测试数据、截图和缓存全部位于artifacts隔离目录，不使用正式数据根目录。
+
+## 核心数据流与平台边界
+
+| 流程 | 调用链与提交边界 |
+|---|---|
+| 餐食/标签 | 上传 → `Store.put_image` 保存原字节 → `JobRunner.submit` 检查归属和个人凭据 → `AIClient` 编码/识别/校验 → jobs 草稿 → 用户确认 → `Store.save_entry`，标签另经 `label_food` 重算 → `summary` |
+| 身体/训练 | 请求模型验证 → 按当前账号和日期保存 → `effective_weight`/有效资料 → `workout_energy`/`nutrients` → 当日摘要与趋势 |
+| 有氧/目标 | 收集表单和有效身体背景 → 保存源指纹并排队 → 输出验证 → 预览/采用时核对指纹 → 保存资料或实际训练才生效 |
+| 每周复盘 | `weekly_status` 检查服务器日期/7天饮食及完成标记 → 个人 Key → 后端统计 → 生成报告 → 保存成功结果，旧成功报告与最新任务分别选择 |
+| 数据管理 | 验证目标/归属 → 对应账号维护锁 → 一致副本/清单 → 完整性与图片哈希 → 切换相对映射 → 保留旧档；整根迁移先停 HTTP/任务/数据库 |
+
+代码树中的 `config.Settings` 和不带 `owner_id` 的 `Store` 仍能支撑旧版导入/回归，这与 CLI 生产使用受控 `WorkspaceHub`/`CredentialStore` 的路径不同。研究旧代码时应沿入口确认实际依赖，不能因为某类保留了环境 Key 读取就判断当前新账号有默认公共 Key。
+
+`paths.private` 在 Windows 设置 ACL，非 Windows 使用 chmod；`config.lock_home` 已有 msvcrt/flock 分支。相对工作区映射和普通 Python 业务提供移植基础，但源码子进程解释器、原生目录选择、快捷方式、文件浏览、冻结环境及部分测试仍依赖 Windows。`RuntimeConfig.capabilities` 只按 local/server 开关，尚未完整反映 OS 差异；需要未来适配与双平台验收。
+
+当前与早期设计的主要演进：单库/公共配置 → 控制库与个人库/个人凭据；当天饮食列表 → 长期保存的周视图；普通照片包装提示 → 独立标签草稿和后端换算；仅源码启动 → Windows完整便携包。尚未实现的服务器上线、Linux完整运行和规模化队列应保留为后续方向，不能写成当前交付。

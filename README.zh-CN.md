@@ -99,3 +99,41 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 便携版构建使用独立官方CPython3.13.16与PyInstaller6.22.3。prepare_release.ps1准备构建环境，build_release.py生成ZIP，check_portable_release.py和check_portable_ui.py验证成品，audit_release.py检查清单和校验。运行这些工具需按参数明确指定构建、输出或测试位置。
 
 问题反馈请附版本、操作步骤和脱敏错误信息，不要在Issue中上传Key、个人数据库或完整日志。
+
+## 工程目录与配置入口
+
+```text
+FitTrack/
+├─ src/fittrack/         FastAPI、存储、计算、AI、任务及平台运行代码
+├─ web/src/             Svelte 页面、组件、共用类型和状态
+├─ tests/               自动测试，默认模拟 AI
+├─ scripts/             安装、检查、构建和成品验收工具
+├─ tools/               Windows 便携入口、PyInstaller 配置与 hook
+├─ release-docs/        成品 TXT 与离线 HTML 指南
+├─ docs/                架构、验收及项目知识库
+├─ .github/workflows/   当前 Windows 自动检查
+├─ AGENTS.md            AI 开发约定和阅读入口
+├─ pyproject.toml       项目元数据、依赖要求、命令和检查配置
+├─ requirements*.lock   开发、运行及构建依赖锁
+└─ web/package-lock.json 前端依赖锁
+```
+
+`.venv`、`web/node_modules`、`src/fittrack/static` 和 `artifacts` 是本机依赖或生成产物，不随源码仓库迁移。前端生产构建输出到后端 static 目录。首次选择的运行数据根目录 R 与源码工程分开管理。
+
+`src/fittrack/__main__.py` 调用 `cli.main`，先验证 R，再创建控制库、个人凭据和服务。生产配置在当前账号设置页输入；旧 `.env.example`/`config.Settings` 保留旧版导入和回归用途，不是当前所有账号共享凭据的入口。模型字段和管理命令参数以源码与 [接口说明](docs/interfaces.md) 为准。
+
+主要输入为身体资料、明确日期的测量、食物/标签/份量、照片与补充描述、训练及个人 AI 配置；输出为持久记录、后端计算的热量收支与趋势、可确认 AI 草稿/报告，以及用户主动创建的健康 ZIP。
+
+## Git、main 与 Release
+
+公开仓库的 `main` 保存持续更新的源码，`v0.4.0` 标签标记一次定版，GitHub Release 提供对应成品。想直接使用请下载 `FitTrack-v0.4.0-windows-x64.zip`；GitHub 自动提供的 Source code ZIP 是开发资料，不包含便携运行环境。
+
+维护者曾在原工程的 `artifacts/github-public` 建立独立公开副本，保留原研发仓库和私人历史。这个外层目录不属于公开项目结构，其他人直接克隆即可。修改/提交/推送源码、重启运行实例和重新构建 Release 是不同动作，推送不会自动升级本机软件。
+
+## 接手与跨平台文档
+
+建议顺序：[当前状态](docs/current_status.md) → [架构](docs/ARCHITECTURE.md) → [开发环境](docs/environment.md) → [跨平台移植](docs/migration.md)。AI 工具先读 [AGENTS.md](AGENTS.md)。
+
+Linux/WSL 的环境命令按现有源码整理，尚未安装验证或完成全功能运行。Windows 原生目录选择、解释器路径、快捷方式、浏览器和部分测试需要单独适配；不能将 Python/前端可跨平台推导成整个应用已跨平台。
+
+其他知识入口：[接口合约](docs/interfaces.md)、[需求](docs/requirements.md)、[决策](docs/decisions.md)、[开发经验](docs/development_notes.md)、[历史资料范围](docs/history_summary.md)、[待确认问题](docs/open_questions.md)、[验收](docs/ACCEPTANCE.md)和[公网部署路线](docs/WEB_DEPLOYMENT_ASSESSMENT.md)。

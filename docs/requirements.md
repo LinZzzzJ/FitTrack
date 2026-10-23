@@ -1,6 +1,6 @@
 # 需求、实现与验收映射
 
-已发布基线为 v0.4.0；整理日期：2026-10-23。R20–R26 来自 2026-10-22 用户提出的新需求及后续确认方案，现已实现于 `main` 源码/API 3。功能“已实现”不表示已包含在 v0.4.0 便携包或所有平台均通过验收。
+已发布基线为 v0.4.0；整理日期：2026-10-23。R20–R26 来自 2026-10-22 用户提出的新需求及后续确认方案；R21 已按后续明确的双模式录餐规则扩展。当前已实现于 `main` 源码/API 5，但不表示已包含在 v0.4.0 便携包或所有平台均通过验收。
 
 ## 已确认且当前已实现
 
@@ -26,7 +26,7 @@
 | R18 | 发布计划：完整、小体积 Windows 便携版与非 MD 指南 | `tools`、`release-docs`、构建检查脚本 | 无需 Python/Node，Windows 11 x64；约 20.81 MiB ZIP；Win10 未实测 |
 | R19 | 公开计划：Public 源码、精致中文 README、Release | README、公开 `main`、v0.4.0 Release | 干净公开历史、模拟截图、无个人数据；没有部署公网服务 |
 | R20 | 静息消耗未知时提供估算和活动等级 | `resting_estimate`、`activity_factor`、Settings/Body | Mifflin–St Jeor、年龄/性别/身高/体重；保留手动值和记录日覆盖，估算不伪装实测 |
-| R21 | 手动录餐时由 AI 生成热量和营养草稿 | `JobRequest.meal_description`、`AIClient.meal_description`、Meals | 文本/可选照片任务，缺失微量值为空，失败保留手动数据，确认前不入账 |
+| R21 | 手动录餐支持 AI 估算和整餐精确录入两种模式 | `JobRequest.meal_description`、`Meal.nutrition_mode`、`AIClient.meal_description`、Meals | AI 模式拆分并人工确认；精确模式整餐录入三大营养素，由后端按 4/4/9 计算热量；从 AI 草稿切入精确模式时清空数值；重量/微量项可空 |
 | R22 | 导入健身软件导出的计划 | 训练 CSV 列映射与 FitTrack JSON 导入 | CSV 日期/名称/动作/组数/次数/重量映射；JSON 版本校验；导入排期不自动成为实际训练 |
 | R23 | 训练日历区分有无实际训练记录 | `/workout-days`、Training 日历 | 只标注实际训练日期；待训练/完成/跳过排期状态保持独立 |
 | R24 | 部位模板降低每日训练录入成本 | 预置部位模板、个人 `workout_templates`、当天套用 | 套用后复制为当天训练；当天编辑不改原模板；账号隔离和备份恢复 |

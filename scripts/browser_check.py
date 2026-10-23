@@ -115,6 +115,26 @@ class OfflineAI:
             "total_kcal": 300,
         }, {"total_tokens": 0}
 
+    def meal_description(self, config, description, note="", path=None):
+        return {
+            "items": [
+                {
+                    "name": "板烧鸡腿堡",
+                    "consumed_part": "去除酱料，按一份估算",
+                    "estimated_edible_grams": 180,
+                    "kcal": 420,
+                    "protein_g": 25,
+                    "carbs_g": 38,
+                    "fat_g": 18,
+                    "fiber_g": 2,
+                    "sugar_g": 7,
+                    "sodium_mg": 850,
+                }
+            ],
+            "assumptions": ["测试 AI 估算；实际品牌配方和份量需要核对", description],
+            "total_kcal": 420,
+        }, {"total_tokens": 0}
+
     def feedback(self, config, context):
         return {
             "summary": "你已经完整记录了饮食和训练。把注意力放在长期趋势，继续保持稳定的节奏。",
@@ -429,20 +449,84 @@ def main():
                 page.get_by_role("button", name="饮食上一周", exact=True).click()
                 previous_day = page.get_by_role("article", name="2026-10-14饮食记录", exact=True)
                 previous_day.get_by_role("button", name="补记本日饮食", exact=True).click()
-                page.get_by_label("食物名称", exact=True).fill("历史补录测试餐")
-                page.get_by_label("食物热量", exact=True).fill("100")
+                page.get_by_role("button", name="精确录入", exact=True).click()
+                page.get_by_label("餐食描述", exact=True).fill("历史补录测试餐")
+                page.get_by_label("整餐蛋白质", exact=True).fill("10")
+                page.get_by_label("整餐碳水", exact=True).fill("10")
+                page.get_by_label("整餐脂肪", exact=True).fill("4")
+                assert page.get_by_text("116 kcal", exact=True).count() >= 1
                 page.get_by_role("button", name="确认并计入当天", exact=True).click()
                 previous_day.get_by_text("历史补录测试餐", exact=True).wait_for()
-                assert (
-                    page.request.get(f"http://127.0.0.1:{port}/api/days/2026-10-14").json()[
-                        "totals"
-                    ]["kcal"]
-                    == 100
-                )
+                exact_day = page.request.get(
+                    f"http://127.0.0.1:{port}/api/days/2026-10-14"
+                ).json()
+                assert exact_day["totals"]["kcal"] == 116
+                assert exact_day["meals"][0]["nutrition_mode"] == "precise"
                 page.get_by_role("button", name="今天", exact=True).click()
                 page.get_by_role("article", name="2026-10-15饮食记录", exact=True).get_by_text(
                     "鸡胸肉丸", exact=True
                 ).wait_for()
+                page.get_by_role("button", name="手动记一餐", exact=True).click()
+                page.get_by_label("餐食描述", exact=True).fill(
+                    "麦当劳板烧鸡腿堡 1 个，去除酱料"
+                )
+                page.get_by_role("button", name="生成 AI 营养草稿", exact=True).click()
+                page.get_by_label("食物名称", exact=True).fill("麦当劳板烧鸡腿堡")
+                page.get_by_role("button", name="精确录入", exact=True).click()
+                page.get_by_label("整餐蛋白质", exact=True).fill("25")
+                page.get_by_label("整餐碳水", exact=True).fill("38")
+                page.get_by_label("整餐脂肪", exact=True).fill("18")
+                page.get_by_role("button", name="AI 估算", exact=True).click()
+                assert page.get_by_label("食物名称", exact=True).first.input_value() == "麦当劳板烧鸡腿堡"
+                page.get_by_role("button", name="精确录入", exact=True).click()
+                assert page.get_by_label("整餐蛋白质", exact=True).input_value() == ""
+                assert page.get_by_label("整餐碳水", exact=True).input_value() == ""
+                assert page.get_by_label("整餐脂肪", exact=True).input_value() == ""
+                page.get_by_label("整餐蛋白质", exact=True).fill("25")
+                page.get_by_label("整餐碳水", exact=True).fill("38")
+                page.get_by_label("整餐脂肪", exact=True).fill("18")
+                assert page.get_by_text("414 kcal", exact=True).count() >= 1
+                page.get_by_role("button", name="确认并计入当天", exact=True).click()
+                page.get_by_text("餐食已确认入账", exact=True).wait_for()
+                precise_day = page.request.get(
+                    f"http://127.0.0.1:{port}/api/days/{today()}"
+                ).json()
+                precise = next(
+                    meal for meal in precise_day["meals"] if meal["nutrition_mode"] == "precise"
+                )
+                assert precise["items"][0]["kcal"] == 414
+                assert precise["source_job_id"] is None
+                assert precise["assumptions"] == []
+                precise_card = page.locator(".meal-card").filter(
+                    has_text="麦当劳板烧鸡腿堡 1 个，去除酱料"
+                )
+                precise_card.get_by_role("button", name="编辑餐食", exact=True).click()
+                assert page.get_by_label("整餐蛋白质", exact=True).input_value() == "25"
+                assert page.get_by_label("整餐碳水", exact=True).input_value() == "38"
+                assert page.get_by_label("整餐脂肪", exact=True).input_value() == "18"
+                page.get_by_role("button", name="关闭弹窗", exact=True).click()
+                page.get_by_role("button", name="删除餐食", exact=True).last.click()
+                page.get_by_role("button", name="确认删除", exact=True).click()
+                page.get_by_text("餐食记录已删除", exact=True).wait_for()
+                page.get_by_role("button", name="手动记一餐", exact=True).click()
+                page.get_by_label("餐食描述", exact=True).fill(
+                    "麦当劳板烧鸡腿堡 1 个，去除酱料"
+                )
+                page.get_by_role("button", name="生成 AI 营养草稿", exact=True).click()
+                page.get_by_label("食物名称", exact=True).fill("麦当劳板烧鸡腿堡")
+                page.get_by_role("button", name="确认并计入当天", exact=True).click()
+                page.get_by_text("餐食已确认入账", exact=True).wait_for()
+                estimated_day = page.request.get(
+                    f"http://127.0.0.1:{port}/api/days/{today()}"
+                ).json()
+                assert any(
+                    meal["nutrition_mode"] == "estimate"
+                    and meal["meal_description"] == "麦当劳板烧鸡腿堡 1 个，去除酱料"
+                    for meal in estimated_day["meals"]
+                )
+                page.get_by_role("button", name="删除餐食", exact=True).last.click()
+                page.get_by_role("button", name="确认删除", exact=True).click()
+                page.get_by_text("餐食记录已删除", exact=True).wait_for()
                 page.get_by_role("button", name="训练与排期", exact=True).click()
                 page.get_by_role("button", name="添加排期", exact=True).click()
                 page.get_by_label("排期名称", exact=True).fill("上肢力量训练")
@@ -456,6 +540,68 @@ def main():
                 assert not page.get_by_role("button", name="AI 估算消耗", exact=True).count()
                 page.get_by_role("button", name="保存训练", exact=True).click()
                 page.get_by_text("训练已记录", exact=True).wait_for()
+
+                # Applying a reactive template must clone its exercises into a
+                # day-local draft without changing the source template.
+                builtin = page.get_by_role("button", name="套用到今天", exact=True).first
+                builtin.click()
+                page.get_by_label("训练名称", exact=True).fill("预置模板当天副本")
+                page.get_by_label("动作名称", exact=True).first.fill("当天临时动作")
+                page.get_by_role("button", name="关闭弹窗", exact=True).click()
+                builtin.click()
+                assert page.get_by_label("动作名称", exact=True).first.input_value() == "高位下拉"
+                page.get_by_role("button", name="关闭弹窗", exact=True).click()
+
+                page.get_by_role("button", name="新建个人模板", exact=True).click()
+                page.get_by_label("模板名称", exact=True).fill("个人卧推模板")
+                page.get_by_label("动作名称", exact=True).fill("杠铃卧推")
+                page.get_by_role("button", name="保存模板", exact=True).click()
+                page.get_by_text("训练模板已保存", exact=True).wait_for()
+                personal_template = page.get_by_role("article").filter(
+                    has_text="个人卧推模板"
+                )
+                personal_template.get_by_role("button", name="套用到今天", exact=True).click()
+                page.get_by_label("训练名称", exact=True).fill("模板训练当天记录")
+                page.get_by_label("动作名称", exact=True).first.fill("当天卧推变式")
+                page.get_by_role("button", name="保存训练", exact=True).click()
+                page.get_by_text("训练已记录", exact=True).wait_for()
+                personal_template.get_by_role("button", name="编辑模板", exact=True).click()
+                assert page.get_by_label("动作名称", exact=True).input_value() == "杠铃卧推"
+                page.get_by_role("button", name="关闭弹窗", exact=True).click()
+                with page.expect_download() as template_download:
+                    page.get_by_role("button", name="导出模板 JSON", exact=True).click()
+                exported_templates = json.loads(
+                    Path(template_download.value.path()).read_text(encoding="utf-8")
+                )
+                assert exported_templates["format"] == "fittrack-training"
+                assert exported_templates["templates"][0]["title"] == "个人卧推模板"
+                personal_template.get_by_role("button", name="导出二维码", exact=True).click()
+                page.get_by_role("img", name="训练模板二维码", exact=True).wait_for()
+                page.evaluate(
+                    """async () => {
+                      const image = document.querySelector('.qr-export img');
+                      const input = document.querySelector('input[accept="image/*"]');
+                      const blob = await (await fetch(image.src)).blob();
+                      const transfer = new DataTransfer();
+                      transfer.items.add(new File([blob], 'template.png', {type: 'image/png'}));
+                      input.files = transfer.files;
+                      input.dispatchEvent(new Event('change', {bubbles: true}));
+                    }"""
+                )
+                page.get_by_text("训练模板已导入", exact=True).wait_for()
+                imported = page.request.get(
+                    f"http://127.0.0.1:{port}/api/workout-templates"
+                ).json()
+                assert sum(item["title"] == "个人卧推模板" for item in imported) == 2
+                workout_rows = page.request.get(
+                    f"http://127.0.0.1:{port}/api/days/{today()}"
+                ).json()["workouts"]
+                assert any(
+                    workout["title"] == "模板训练当天记录"
+                    and workout["exercises"][0]["name"] == "当天卧推变式"
+                    for workout in workout_rows
+                )
+
                 work_before = len(
                     page.request.get(f"http://127.0.0.1:{port}/api/days/{today()}").json()[
                         "workouts"
@@ -752,10 +898,14 @@ def main():
                                 "historical diet week and pre-start backfill",
                                 "backend version mismatch blocks save and preserves draft",
                                 "AI draft",
+                                "precise meal macro entry with server-calculated 4/4/9 calories",
+                                "AI-to-precise reset, precise-meal edit values and confirmation without AI provenance",
+                                "described-meal AI estimate and confirmation",
                                 "portion scaling",
                                 "confirm meal",
                                 "plan",
                                 "strength sets",
+                                "template clone isolation, personal-template edit, JSON export, and QR image round-trip",
                                 "badminton cardio AI preview, invalidation, adoption, save and reload",
                                 "manual completion without daily AI",
                                 "weekly eligibility, history, saved report and stale notice",

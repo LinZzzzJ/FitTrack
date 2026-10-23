@@ -1868,6 +1868,60 @@ tr:last-child td {
   align-items: end;
   margin: 16px 0;
 }
+.meal-entry-mode {
+  width: fit-content;
+  padding: 4px;
+  background: #edf1e7;
+  border-radius: 8px;
+  margin: 18px 0 12px;
+}
+.meal-entry-mode button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+}
+.meal-ai-entry {
+  margin: 10px 0 14px;
+}
+.meal-ai-entry p {
+  margin: 0;
+}
+.precise-entry {
+  display: grid;
+  gap: 14px;
+  padding: 15px 0;
+}
+.precise-macros,
+.precise-micros {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.precise-extra {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+}
+.precise-extra summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--green);
+}
+.precise-extra .form-grid {
+  margin-top: 14px;
+}
+.exact-energy-preview {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.exact-energy-preview strong {
+  color: var(--ink);
+  font-size: 20px;
+}
 .nutrient-summary {
   display: flex;
   gap: 22px;
@@ -1970,6 +2024,10 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
   .meal-ai-entry {
+    grid-template-columns: 1fr;
+  }
+  .precise-macros,
+  .precise-micros {
     grid-template-columns: 1fr;
   }
   .template-exercise-row {

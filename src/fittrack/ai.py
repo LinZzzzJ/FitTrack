@@ -82,6 +82,12 @@ class MealEstimate(Model):
     assumptions: list[str] = Field(default_factory=list, max_length=20)
     total_kcal: float | None = Field(None, ge=0, le=100000)
 
+    @model_validator(mode="after")
+    def require_estimated_weights(self):
+        if any(item.estimated_edible_grams is None for item in self.items):
+            raise ValueError("AI 餐食估算必须为每项提供食用重量")
+        return self
+
 
 class CoachFeedback(Model):
     summary: str = Field(min_length=1, max_length=2000)

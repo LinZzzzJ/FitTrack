@@ -1,4 +1,5 @@
 from datetime import date
+import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -47,7 +48,7 @@ class BodyRecord(Model):
 class FoodItem(Model):
     name: str = Field(min_length=1, max_length=100)
     consumed_part: str = Field("", max_length=300)
-    estimated_edible_grams: float = Field(ge=0, le=10000)
+    estimated_edible_grams: float | None = Field(None, ge=0, le=10000)
     kcal: float = Field(ge=0, le=20000)
     protein_g: float = Field(ge=0, le=2000)
     carbs_g: float = Field(ge=0, le=5000)
@@ -91,9 +92,53 @@ class Meal(Model):
     note: str = Field("", max_length=2000)
     assumptions: list[str] = Field(default_factory=list, max_length=20)
     items: list[FoodItem] = Field(min_length=1, max_length=50)
+    meal_description: str | None = Field(None, max_length=4000)
+    nutrition_mode: Literal["estimate", "precise"] | None = None
     image_id: str | None = None
     source_job_id: str | None = None
     nutrition_label: NutritionLabel | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def calculate_precise_meal_energy(cls, value):
+        if not isinstance(value, dict) or value.get("nutrition_mode") != "precise":
+            return value
+        if value.get("nutrition_label") is not None:
+            raise ValueError("营养标签记录不能使用整餐精确录入模式")
+        description = value.get("meal_description")
+        if not isinstance(description, str) or not description.strip():
+            raise ValueError("精确录入需要填写餐食描述")
+        items = value.get("items")
+        if not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict):
+            raise ValueError("精确录入必须提供一组整餐营养总量")
+        item = items[0].copy()
+        amounts = []
+        limits = {"protein_g": 2000, "carbs_g": 5000, "fat_g": 2000}
+        for key, maximum in limits.items():
+            try:
+                amount = float(item[key])
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("精确录入需要填写蛋白质、碳水和脂肪") from None
+            if not math.isfinite(amount) or amount < 0 or amount > maximum:
+                raise ValueError("三大营养素必须是允许范围内的有限非负数")
+            amounts.append(amount)
+        item["kcal"] = round(amounts[0] * 4 + amounts[1] * 4 + amounts[2] * 9, 2)
+        if item["kcal"] > 20000:
+            raise ValueError("按三大营养素计算的热量超出允许范围")
+        item.setdefault("estimated_edible_grams", None)
+        value = value.copy()
+        value["items"] = [item]
+        value["source_job_id"] = None
+        value["assumptions"] = []
+        return value
+
+    @model_validator(mode="after")
+    def estimated_items_require_weight(self):
+        if self.nutrition_mode == "precise":
+            return self
+        if any(item.estimated_edible_grams is None for item in self.items):
+            raise ValueError("AI 估算明细必须包含食用重量；精确录入请切换到整餐模式")
+        return self
 
 
 class TrainingSet(Model):

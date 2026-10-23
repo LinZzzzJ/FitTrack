@@ -46,6 +46,26 @@
   let draft = $state<Meal | null>(null),
     assumptions = $state<string[]>([]),
     deleting = $state<Meal | null>(null);
+  type ExactNutrients = {
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+    fiber_g: number | null;
+    sugar_g: number | null;
+    sodium_mg: number | null;
+    grams: number | null;
+  };
+  const blankExactNutrients = (): ExactNutrients => ({
+    protein_g: null,
+    carbs_g: null,
+    fat_g: null,
+    fiber_g: null,
+    sugar_g: null,
+    sodium_mg: null,
+    grams: null,
+  });
+  let manualMode = $state<"estimate" | "precise">("estimate");
+  let exactNutrients = $state<ExactNutrients>(blankExactNutrients());
   let preview = $state<Photo | null>(null);
   let mealMode = $state<"photo" | "label">("photo");
   let labelDraft = $state<Meal | null>(null);
@@ -117,6 +137,16 @@
     sugar_g: null,
     sodium_mg: null,
   });
+  function setManualMode(value: "estimate" | "precise") {
+    if (manualMode === value || !draft) return;
+    if (value === "precise" && draft.nutrition_mode !== "precise") {
+      exactNutrients = blankExactNutrients();
+    }
+    if (value === "estimate" && manualMode === "precise" && draft.nutrition_mode === "precise") {
+      draft.items = [];
+    }
+    manualMode = value;
+  }
   let mealJobs = $derived(
     app.day?.jobs.filter((job) => job.kind === "meal") || [],
   );
@@ -126,6 +156,12 @@
   let draftTotal = $derived(
     draft?.items.reduce((sum, item) => sum + (Number(item.kcal) || 0), 0) || 0,
   );
+  let exactKcal = $derived.by(() => {
+    const { protein_g, carbs_g, fat_g } = exactNutrients;
+    if (protein_g == null || carbs_g == null || fat_g == null) return null;
+    return Math.round((protein_g * 4 + carbs_g * 4 + fat_g * 9) * 100) / 100;
+  });
+  let exactKcalValid = $derived(exactKcal != null && exactKcal <= 20000);
   let draftFoodChart = $derived(
     pieOptions(
       draft?.items.map((item) => ({
@@ -272,12 +308,16 @@
       return;
     }
     assumptions = [];
+    manualMode = "estimate";
+    exactNutrients = blankExactNutrients();
     draft = {
       date: app.date,
       slot,
       title: "",
       note: "",
-      items: [blankFood()],
+      meal_description: null,
+      nutrition_mode: "estimate",
+      items: [],
       image_id: image?.id || null,
       source_job_id: null,
     };
@@ -297,12 +337,17 @@
       return;
     }
     assumptions = [];
+    manualMode = "estimate";
+    exactNutrients = blankExactNutrients();
+    mealDescription = job.request.meal_description || "";
     draft = {
       date: job.date,
       slot: job.request.slot || "lunch",
       title: "",
       note: job.request.note || "",
-      items: [blankFood()],
+      meal_description: mealDescription || null,
+      nutrition_mode: "estimate",
+      items: [],
       image_id: job.request.image_id || null,
       source_job_id: null,
     };
@@ -313,12 +358,28 @@
       return;
     }
     assumptions = meal.assumptions || [];
+    manualMode = meal.nutrition_mode === "precise" ? "precise" : "estimate";
+    mealDescription = meal.meal_description || "";
+    const exactItem = meal.nutrition_mode === "precise" ? meal.items[0] : null;
+    exactNutrients = exactItem
+      ? {
+          protein_g: exactItem.protein_g,
+          carbs_g: exactItem.carbs_g,
+          fat_g: exactItem.fat_g,
+          fiber_g: exactItem.fiber_g ?? null,
+          sugar_g: exactItem.sugar_g ?? null,
+          sodium_mg: exactItem.sodium_mg ?? null,
+          grams: exactItem.estimated_edible_grams,
+        }
+      : blankExactNutrients();
     draft = {
       id: meal.id,
       date: meal.date,
       slot: meal.slot,
       title: meal.title,
       note: meal.note,
+      meal_description: meal.meal_description || null,
+      nutrition_mode: meal.nutrition_mode || null,
       assumptions: meal.assumptions || [],
       items: structuredClone($state.snapshot(meal.items)),
       image_id: meal.image_id,
@@ -342,11 +403,16 @@
     }
     if (!job.result?.items) return;
     assumptions = job.result.assumptions || [];
+    manualMode = "estimate";
+    mealDescription = job.request.meal_description || "";
+    exactNutrients = blankExactNutrients();
     draft = {
       date: job.date,
       slot: job.request.slot || "lunch",
       title: "",
       note: job.request.note || "",
+      meal_description: job.request.meal_description || null,
+      nutrition_mode: "estimate",
       assumptions: job.result.assumptions || [],
       items: structuredClone($state.snapshot(job.result.items)),
       image_id: job.request.image_id || null,
@@ -355,7 +421,7 @@
   }
   function scale(item: Food, event: Event) {
     const grams = (event.currentTarget as HTMLInputElement).valueAsNumber;
-    if (!Number.isFinite(grams) || grams < 0) return;
+    if (item.estimated_edible_grams == null || !Number.isFinite(grams) || grams < 0) return;
     const ratio =
       item.estimated_edible_grams > 0 ? grams / item.estimated_edible_grams : 1;
     for (const key of [
@@ -406,6 +472,41 @@
     event.preventDefault();
     if (!draft) return;
     const { id, ...payload } = $state.snapshot(draft);
+    payload.meal_description = mealDescription.trim() || null;
+    if (manualMode === "precise") {
+      if (!exactKcalValid) {
+        notify(exactKcal == null ? "请填写蛋白质、碳水和脂肪" : "按三大营养素计算的热量超出允许范围", true);
+        return;
+      }
+      const description = mealDescription.trim();
+      if (!description) {
+        notify("请先描述这餐吃了什么", true);
+        return;
+      }
+      payload.nutrition_mode = "precise";
+      payload.source_job_id = null;
+      payload.assumptions = [];
+      payload.items = [
+        {
+          name: payload.title?.trim() || description.slice(0, 100),
+          consumed_part: "整餐精确录入",
+          estimated_edible_grams: exactNutrients.grams,
+          kcal: exactKcal!,
+          protein_g: exactNutrients.protein_g!,
+          carbs_g: exactNutrients.carbs_g!,
+          fat_g: exactNutrients.fat_g!,
+          fiber_g: exactNutrients.fiber_g,
+          sugar_g: exactNutrients.sugar_g,
+          sodium_mg: exactNutrients.sodium_mg,
+        },
+      ];
+    } else {
+      if (!payload.items.length) {
+        notify("请先输入餐食描述并生成 AI 估算草稿", true);
+        return;
+      }
+      payload.nutrition_mode = "estimate";
+    }
     if (
       await perform(
         () =>
@@ -608,7 +709,7 @@
     onclose={() => (labelDraft = null)}
   />{/if}
 {#if draft}<Modal
-    title={draft.id ? "修改餐食记录" : "确认这餐的食物与份量"}
+    title={draft.id ? "修改餐食记录" : manualMode === "precise" ? "精确录入餐食营养" : "记录一餐"}
     wide
     onclose={() => (draft = null)}
     ><form onsubmit={save}>
@@ -629,11 +730,27 @@
           maxlength="100"
           placeholder="例如：训练后的午餐"
         /></label
-      >{#if assumptions.length}<div class="assumptions">
+      ><div class="meal-mode-controls meal-entry-mode" role="group" aria-label="营养录入模式">
+        <button type="button" class:active={manualMode === "estimate"} aria-pressed={manualMode === "estimate"} onclick={() => setManualMode("estimate")}><Sparkles size={15} />AI 估算</button>
+        <button type="button" class:active={manualMode === "precise"} aria-pressed={manualMode === "precise"} onclick={() => setManualMode("precise")}><Pencil size={15} />精确录入</button>
+      </div>
+      <label
+        >餐食描述<textarea
+          aria-label="餐食描述"
+          bind:value={mealDescription}
+          rows="2"
+          maxlength="4000"
+          required={manualMode === "precise"}
+          placeholder={manualMode === "precise" ? "例如：麦当劳板烧鸡腿堡 1 个，去除酱料" : "描述食物、份量和做法，例如：麦当劳板烧鸡腿堡 1 个，去除酱料"}
+        ></textarea></label
+      >{#if manualMode === "estimate"}<div class="meal-ai-entry">
+          <p class="small muted">AI 会拆分食物并估算热量与营养；确认前可逐项修改。</p>
+          <button type="button" class="secondary" disabled={estimatingMeal || app.busy || mealDescription.trim().length < 3} onclick={estimateManual}><Sparkles size={16} />{estimatingMeal ? "估算中…" : "生成 AI 营养草稿"}</button>
+        </div>{#if assumptions.length}<div class="assumptions">
           <strong>识别时的假设，请核对</strong
           >{#each assumptions as assumption}<p>· {assumption}</p>{/each}
         </div>{/if}
-      <div class="food-editor">
+      {#if draft.items.length}<div class="food-editor">
         {#each draft.items as item, index}<div class="food-row">
             <div class="food-row-title">
               <span class="food-index"
@@ -724,20 +841,12 @@
         class="text-button"
         onclick={() => draft!.items.push(blankFood())}
         ><Plus size={16} />补充一种食物</button
-      ><div class="meal-ai-entry">
-        <label
-          >餐食描述<textarea bind:value={mealDescription} rows="2" maxlength="4000" placeholder="例如：一碗米饭、两块煎鸡胸肉，约 150 克，少油"></textarea></label
-        ><button type="button" class="secondary" disabled={estimatingMeal || app.busy || mealDescription.trim().length < 3} onclick={estimateManual}><Sparkles size={16} />{estimatingMeal ? "估算中…" : "AI 生成营养草稿"}</button>
-      </div>
+      >
       {#if draft.items.some((item) => item.fiber_g != null || item.sugar_g != null || item.sodium_mg != null)}<div class="nutrient-summary">
         <span>膳食纤维 <strong>{number(draft.items.every((item) => item.fiber_g != null) ? draft.items.reduce((sum, item) => sum + (item.fiber_g || 0), 0) : null, 1)} g</strong></span>
         <span>总糖 <strong>{number(draft.items.every((item) => item.sugar_g != null) ? draft.items.reduce((sum, item) => sum + (item.sugar_g || 0), 0) : null, 1)} g</strong></span>
         <span>钠 <strong>{number(draft.items.every((item) => item.sodium_mg != null) ? draft.items.reduce((sum, item) => sum + (item.sodium_mg || 0), 0) : null, 0)} mg</strong></span>
       </div>{/if}
-      ><label
-        >餐食备注<textarea bind:value={draft.note} rows="2" maxlength="2000"
-        ></textarea></label
-      >
       <div class="two-columns meal-distribution">
         <div>
           <h4>各食物热量占比</h4>
@@ -761,11 +870,29 @@
             蛋白质 / 碳水 / 脂肪 · 4 / 4 / 9 kcal 每克
           </div>
         </div>
-      </div>
+      </div>{:else}<p class="info-note">先描述这餐，再生成 AI 营养草稿。</p>{/if}
+      {:else}<div class="precise-entry">
+        <div class="form-grid precise-macros">
+          <label>蛋白质 / g<input aria-label="整餐蛋白质" type="number" min="0" max="2000" step="any" bind:value={exactNutrients.protein_g} required /></label>
+          <label>碳水 / g<input aria-label="整餐碳水" type="number" min="0" max="5000" step="any" bind:value={exactNutrients.carbs_g} required /></label>
+          <label>脂肪 / g<input aria-label="整餐脂肪" type="number" min="0" max="2000" step="any" bind:value={exactNutrients.fat_g} required /></label>
+        </div>
+        <label>整餐重量 / g <span>可选</span><input aria-label="整餐重量" type="number" min="0" max="10000" step="any" bind:value={exactNutrients.grams} placeholder="不知道可留空" /></label>
+        <details class="precise-extra"><summary>添加膳食纤维、糖和钠</summary>
+          <div class="form-grid precise-micros">
+            <label>膳食纤维 / g<input aria-label="整餐膳食纤维" type="number" min="0" max="2000" step="any" bind:value={exactNutrients.fiber_g} placeholder="可留空" /></label>
+            <label>总糖 / g<input aria-label="整餐总糖" type="number" min="0" max="2000" step="any" bind:value={exactNutrients.sugar_g} placeholder="可留空" /></label>
+            <label>钠 / mg<input aria-label="整餐钠" type="number" min="0" max="100000" step="any" bind:value={exactNutrients.sodium_mg} placeholder="可留空" /></label>
+          </div>
+        </details>
+        <div class="exact-energy-preview"><span>按 4 / 4 / 9 计算热量</span><strong>{number(exactKcal, 2)} kcal</strong></div>
+        {#if exactKcal != null && exactKcal > 20000}<p class="goal-error" role="alert">计算结果超出允许范围，请核对三大营养素数值。</p>{/if}
+      </div>{/if}
+      <label>餐食备注<textarea bind:value={draft.note} rows="2" maxlength="2000"></textarea></label>
       <div class="modal-footer">
-        <strong>合计 {number(draftTotal)} kcal</strong><button
+        <strong>合计 {number(manualMode === "precise" ? exactKcal : draftTotal, 2)} kcal</strong><button
           class="primary"
-          disabled={app.busy}
+          disabled={app.busy || estimatingMeal || (manualMode === "estimate" && !draft.items.length) || (manualMode === "precise" && !exactKcalValid)}
           ><Check size={17} />{draft.id ? "保存修改" : "确认并计入当天"}</button
         >
       </div>

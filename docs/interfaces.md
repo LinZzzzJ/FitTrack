@@ -1,6 +1,6 @@
 # 接口、任务与数据格式合约
 
-已发布 v0.4.0 便携版为 API 修订号 2；当前 `main` 源码为 API 修订号 3。应用版本字段仍是 v0.4.0，新增能力尚未打入并验收新便携包。以下根据 `models.py`、`routes.py`、`management_routes.py`、`store.py`、`coaching.py` 和 `storage_ops.py` 整理；修改接口时同步前端 `web/src/lib/types.ts`、任务与恢复校验。
+已发布 v0.4.0 便携版为 API 修订号 2；当前 `main` 源码为 API 修订号 5。应用版本字段仍是 v0.4.0，新增能力尚未打入并验收新便携包。以下根据 `models.py`、`routes.py`、`management_routes.py`、`store.py`、`coaching.py` 和 `storage_ops.py` 整理；修改接口时同步前端 `web/src/lib/types.ts`、任务与恢复校验。
 
 ## 通用规则
 
@@ -56,8 +56,8 @@
 |---|---|
 | `Profile` | `effective_date`、`height_cm` 90–240、`initial_weight_kg` 20–350、可空 `body_fat_pct`、`sex`、可空 `age` 13–110；静息能量可手填 500–5000，留空时须有年龄用于 Mifflin–St Jeor 估算；`activity_level` 为久坐/轻度/中度/高度/非常活跃，对应系数 1.2/1.375/1.55/1.725/1.9，旧 `activity_factor` 仍兼容。资料读取响应另含 `estimated_resting_kcal`、`estimated_maintenance_kcal`，保存请求不接受这两个派生字段 |
 | `BodyRecord` | `date`、可空 `weight_kg`/`body_fat_pct`/`resting_kcal`、`note`；缺失测量不是零 |
-| `FoodItem` | `name`、`consumed_part`、`estimated_edible_grams`、`kcal`、三大营养素必需；`fiber_g`、`sugar_g` 可空克数，`sodium_mg` 可空毫克。旧 JSON 缺这些键时按未知处理 |
-| `Meal` | `date`、`slot=breakfast/lunch/dinner/snack`、`title`、`note`、`assumptions`、1–50 项 `items`、可空 `image_id`/`source_job_id`/`nutrition_label` |
+| `FoodItem` | `name`、`consumed_part`、可空 `estimated_edible_grams`、`kcal`、三大营养素；`fiber_g`、`sugar_g` 可空克数，`sodium_mg` 可空毫克。精确模式重量可空；旧 JSON 缺微量键时按未知处理 |
+| `Meal` | `date`、`slot=breakfast/lunch/dinner/snack`、`title`、`note`、可空 `meal_description`、可空 `nutrition_mode=estimate/precise`、`assumptions`、1–50 项 `items`、可空 `image_id`/`source_job_id`/`nutrition_label` |
 | `Workout` | `date`、`title`、`kind=strength/cardio`、`activity`、`duration_minutes` (0,1440]、`intensity=light/moderate/vigorous`、可空 `met` 1–25、`net_kcal_override`、`plan_id`、`ai_estimate_job_id` |
 | `Exercise` / `TrainingSet` | 动作 `name`、`sets`；每组 `reps` 和总外加 `weight_kg`，自重为 0 外加重量 |
 | `TrainingPlan` | 日期、类别、运动类型、时长、强度、备注和可选动作明细；`status=planned/skipped`，实际完成由训练关联推导 |
@@ -76,9 +76,15 @@
 - `kcal = (kJ / 4.184 或原 kcal) × 实际克数 / 基准克数`，已知营养项按同倍率缩放。374 kJ/100g、60g 为约 53.63 kcal，120g 约 107.27 kcal。
 - 保存 `Meal.nutrition_label` 时后端重算 `items`，不信任客户端伪造的预览值。快照随餐食保存和备份；删除分析来源不移除标签快照。
 
+## 手动餐食双模式
+
+- `nutrition_mode=estimate` 保存 AI 估算或其人工修订的多项食物明细。AI 使用餐食描述和可选照片生成草稿；必须由用户确认 Meal 后才计入摄入。
+- `nutrition_mode=precise` 保存整餐一项汇总：须提供非空 `meal_description` 和蛋白质、碳水、脂肪三项总量；重量、膳食纤维、总糖和钠可空。服务端始终按 `round(4×protein_g + 4×carbs_g + 9×fat_g, 2)` 重算 `kcal`，不信任客户端提供的热量；精确模式会清除 AI `source_job_id` 和估算假设。若宏量值无效或计算值超过 kcal 字段上限则拒绝保存。
+- 精确录入不伪造食物拆分；旧 Meal 缺少模式/描述字段时仍按原数据读取，SQLite user_version 不变。营养标签快照与 `nutrition_mode=precise` 互斥。
+
 ## AI 任务合约
 
-`JobRequest` 公共字段：`kind`、`date`、`request_key`（8–100 字符）；可选 `image_id`、`note`、`slot`。普通 `meal` 至少提供照片或 3–4000 字符的 `meal_description`，也可两者都提供；`meal_mode=label` 仍要求照片且不能带 `meal_description`。按用户和 `request_key` 幂等；手动重试生成新请求标识，网络重发同一请求使用原标识。
+`JobRequest` 公共字段：`kind`、`date`、`request_key`（8–100 字符）；可选 `image_id`、`note`、`slot`。AI 估算的普通 `meal` 至少提供照片或 3–4000 字符的 `meal_description`，也可两者都提供；`meal_mode=label` 仍要求照片且不能带 `meal_description`。精确录入是 `POST/PUT /api/meals` 的 Meal 数据模式，不创建 AI job。按用户和 `request_key` 幂等；手动重试生成新请求标识，网络重发同一请求使用原标识。
 
 | kind | 附加输入 | 结果及入账边界 |
 |---|---|---|

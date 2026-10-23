@@ -1,4 +1,4 @@
-export const API_REVISION = 3;
+export const API_REVISION = 5;
 export interface VersionInfo {
   version: string;
   api_revision: number;
@@ -35,6 +35,8 @@ export function checkVersion() {
           "workout_templates",
           "training_import",
           "activity_estimates",
+          "meal_entry_modes",
+          "precise_meal_energy",
         ].every((value) =>
           info.capabilities?.includes(value),
         )

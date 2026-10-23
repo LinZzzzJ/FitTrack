@@ -39,7 +39,7 @@ export interface BodyRecord {
 export interface Food {
   name: string;
   consumed_part: string;
-  estimated_edible_grams: number;
+  estimated_edible_grams: number | null;
   kcal: number;
   protein_g: number;
   carbs_g: number;
@@ -65,6 +65,8 @@ export interface Meal {
   slot: "breakfast" | "lunch" | "dinner" | "snack";
   title: string;
   note: string;
+  meal_description?: string | null;
+  nutrition_mode?: "estimate" | "precise" | null;
   assumptions?: string[];
   items: Food[];
   image_id: string | null;

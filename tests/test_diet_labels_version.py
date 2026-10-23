@@ -159,9 +159,10 @@ def test_diet_history_cross_week_year_old_dates_and_ownership(client, app):
 
 def test_version_is_public_and_mismatch_prevents_mutation(client, app, monkeypatch):
     info = client.get("/api/version")
-    assert info.status_code == 200 and info.json()["api_revision"] == 3
+    assert info.status_code == 200 and info.json()["api_revision"] == 5
     assert "nutrition_label" in info.json()["capabilities"]
     assert "meal_job_delete" in info.json()["capabilities"]
+    assert "precise_meal_energy" in info.json()["capabilities"]
     assert not info.json()["restart_required"] and "D:" not in info.text
     register(client)
     assert (

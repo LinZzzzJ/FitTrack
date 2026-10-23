@@ -1,6 +1,6 @@
 # Windows → Ubuntu/WSL 移植开发清单
 
-发布基线：v0.4.0、API 修订号 2；当前 `main` 源码为 API 修订号 3。整理日期：2026-10-23。本文区分当前源码检查与平台支持验收；Linux 完整运行和跨 OS 数据迁移仍未验收。
+发布基线：v0.4.0、API 修订号 2；当前 `main` 源码为 API 修订号 5。整理日期：2026-10-24。本文区分当前源码检查与平台支持验收；Linux 完整运行和跨 OS 数据迁移仍未验收。
 
 ## 先区分三种目标
 
@@ -74,4 +74,4 @@ Git 迁移的是受版本管理的源码与文档，不带账号库、Key、照�
 | 数据管理 | 备份恢复、跨账号导入、旧档保留、失败回退、图像哈希 |
 | 平台与 UI | 能力与实际一致、浏览器/无桌面行为、桌面与窄窗口、Windows EXE 回归 |
 
-v0.4.0 Windows 发行有 129 项后端测试及成品验收。当前 `main` 源码在 Linux Python 3.14.4 环境排除 `test_portable.py` 后 124 项通过、2 项跳过；完整 Linux 测试中的 Windows API 失败不计为 Linux 功能回归。Linux 启动器、管理操作、浏览器全流程、整根迁移和新功能 Windows 成品仍未验收。详细范围见 [ACCEPTANCE](ACCEPTANCE.md) 与 [open_questions](open_questions.md)。
+v0.4.0 Windows 发行有 129 项后端测试及成品验收。最近一次已记录的 `main` Linux Python 3.14.4 检查在排除 `test_portable.py` 后 131 项通过、2 项跳过；本轮 WSL 因缺少 `ensurepip` 未复跑。完整 Linux 测试中的 Windows API 失败不计为 Linux 功能回归。Linux 启动器、管理操作、浏览器全流程、整根迁移和新功能便携成品仍未验收。详细范围见 [ACCEPTANCE](ACCEPTANCE.md) 与 [open_questions](open_questions.md)。

@@ -111,9 +111,17 @@
       0,
     ) || 0,
   );
+  function exerciseSnapshot(exercises: Exercise[] | undefined): Exercise[] {
+    return structuredClone($state.snapshot(exercises || [])) as Exercise[];
+  }
   onMount(() => {
     month = app.date.slice(0, 7);
-    void api.get<WorkoutTemplate[]>("/workout-templates").then((value) => (templates = value));
+    void api
+      .get<WorkoutTemplate[]>("/workout-templates")
+      .then((value) => (templates = value))
+      .catch((error) =>
+        notify(error instanceof Error ? error.message : "无法读取训练模板", true),
+      );
   });
   async function loadMonth() {
     const selected = month;
@@ -155,7 +163,7 @@
       intensity: template?.intensity || plan?.intensity || "moderate",
       met: null,
       net_kcal_override: null,
-      exercises: structuredClone(template?.exercises || plan?.exercises || []),
+      exercises: exerciseSnapshot(template?.exercises || plan?.exercises),
       note: template?.note || plan?.note || "",
       plan_id: plan?.id || null,
       ai_estimate_job_id: null,
@@ -171,7 +179,7 @@
         intensity: existing.intensity,
         met: existing.met,
         net_kcal_override: existing.net_kcal_override,
-        exercises: structuredClone($state.snapshot(existing.exercises)),
+        exercises: exerciseSnapshot(existing.exercises),
         note: existing.note,
         plan_id: existing.plan_id,
         ai_estimate_job_id: existing.ai_estimate_job_id || null,
@@ -190,7 +198,7 @@
     };
   }
   function editTemplate(value: WorkoutTemplate) {
-    templateDraft = structuredClone(value);
+    templateDraft = structuredClone($state.snapshot(value)) as WorkoutTemplate;
   }
   async function saveTemplate(event: SubmitEvent) {
     event.preventDefault();
@@ -234,11 +242,19 @@
     anchor.click();
   }
   function templatePayload(value: WorkoutTemplate) {
-    const { id: _id, ...template } = value;
+    const { id: _id, ...template } = structuredClone(
+      $state.snapshot(value),
+    ) as WorkoutTemplate;
     return { format: "fittrack-template", version: 1, template };
   }
   function exportTemplates() {
-    downloadFile("fittrack-templates.json", JSON.stringify({ format: "fittrack-training", version: 1, templates: templates.map(({ id: _id, ...item }) => item) }, null, 2));
+    const exported = (structuredClone($state.snapshot(templates)) as WorkoutTemplate[]).map(
+      ({ id: _id, ...item }) => item,
+    );
+    downloadFile(
+      "fittrack-templates.json",
+      JSON.stringify({ format: "fittrack-training", version: 1, templates: exported }, null, 2),
+    );
   }
   async function exportQr(value: WorkoutTemplate) {
     const payload = JSON.stringify(templatePayload(value));
@@ -274,6 +290,7 @@
       qrTemplate = null;
       cameraOpen = false;
       stopCamera();
+      qrDialog = false;
       notify("训练模板已导入");
     } catch (error) {
       qrError = error instanceof Error ? error.message : "二维码内容无效";
@@ -485,7 +502,7 @@
         intensity: existing.intensity,
         status: existing.status === "completed" ? "planned" : existing.status,
         note: existing.note,
-        exercises: structuredClone(existing.exercises || []),
+        exercises: exerciseSnapshot(existing.exercises),
       };
   }
   async function saveWorkout(event: SubmitEvent) {

@@ -1,6 +1,6 @@
 # 当前状态与接手入口
 
-知识整理日期：2026-10-23。已发布标签与 Windows 便携版基线为 v0.4.0 / API 修订号 2。当前 `main` 源码已包含后续功能，API 修订号为 3；`APP_VERSION`、`pyproject.toml` 和版本标签仍为 v0.4.0，尚无对应的新便携包或 Windows 验收。HEAD 提交标题不能替代版本文件或标签作为发行依据。
+知识整理日期：2026-10-24。已发布标签与 Windows 便携版基线为 v0.4.0 / API 修订号 2。当前 `main` 源码包含后续功能，API 修订号为 5；`APP_VERSION`、`pyproject.toml` 和版本标签仍为 v0.4.0，尚无对应的新便携包验收。当前源码 Windows 检查已通过，但不能替代新便携包验收。HEAD 提交标题不能替代版本文件或标签作为发行依据。
 
 ## 当前交付与正在进行的工作
 
@@ -10,9 +10,9 @@
 | 公开源码 | 独立干净历史；初次公开仅包含一次提交，不包含原私人开发历史 |
 | 项目知识库 | 已整理架构、合约、需求、决策、经验与移植边界；本轮继续同步新增源码功能和验证边界 |
 | 当前 `main` 新功能 | 静息消耗估算、文字餐食 AI、营养扩展、训练模板/导入/二维码与训练日期标记已进入源码；未包含在 v0.4.0 便携包 |
-| 当前源码 Linux 检查 | Python 3.14 隔离环境排除 `test_portable.py` 后 124 项通过、2 项跳过；Ruff、Svelte 检查和构建通过。见 [验收](ACCEPTANCE.md) |
-| Ubuntu/WSL 开发环境 | 已在隔离 Linux Python 3.14.4 / Node 24 环境安装检查依赖并运行有限源码检查；不是完整产品移植或 Linux 全套验收 |
-| Windows 新功能验收 | 尚未执行 `scripts/check.ps1` 或构建新便携版；不能据源码检查宣称 Windows 成品已验收 |
+| 当前源码 Linux 检查 | 最近记录为 Python 3.14 隔离环境排除 `test_portable.py` 后 131 项通过、2 项跳过；本轮因缺少 `ensurepip` 未复跑。见 [验收](ACCEPTANCE.md) |
+| Ubuntu/WSL 开发环境 | 已有 Python 3.14.4 / Node 24 的有限检查记录；本轮系统 Python 缺少 `ensurepip`，未重建隔离 venv。不是完整产品移植或 Linux 全套验收 |
+| Windows 当前源码检查 | 本轮 Windows checkout 执行 `scripts/check.ps1`：142 项 pytest、Ruff、Svelte 检查和构建通过；Edge 隔离浏览器流程通过。新便携包尚未构建/验收 |
 | Ubuntu/WSL 完整运行 | 部分源码检查已运行；平台启动、管理操作、跨 OS 迁移与完整界面流程仍未验收 |
 | Linux 完整运行、Linux 便携包 | 未交付、未验收 |
 | 真实公网服务 | 未部署；已有 `server` 模式基础，不等于可直接上线 |
@@ -49,7 +49,7 @@
 
 ## 最近修改与验证
 
-已发布 v0.4.0 主要调整 `distribution`、`desktop`、原生目录选择、便携构建与成品检查；此前 v0.3.1 增加照片分析删除及相关竞态保护。当前 `main` 后续源码改动使用 API 修订号 3，但应用版本号和便携版尚未提升。本轮文档改动只更新 Markdown，没有变更业务源码。
+已发布 v0.4.0 主要调整 `distribution`、`desktop`、原生目录选择、便携构建与成品检查；此前 v0.3.1 增加照片分析删除及相关竞态保护。当前 `main` 后续源码改动使用 API 修订号 5，但应用版本号和便携版尚未提升。本轮合并录餐 AI/精确双模式切换重置行为；Windows 源码检查和浏览器流程通过，新便携包仍未构建。
 
 v0.4.0 Windows 基线使用 Python 3.12、Node.js 24；129 项 pytest、Ruff、Svelte 检查及前端构建通过。便携版另在 Windows 11 x64、内置 Python 3.13.16 上验收。当前源码在 Linux 的验证边界及不能推导的结论见 [ACCEPTANCE](ACCEPTANCE.md)。远端 Actions 结果只适用于其记录的提交。
 
@@ -66,9 +66,9 @@ v0.4.0 Windows 基线使用 Python 3.12、Node.js 24；129 项 pytest、Ruff、S
 
 ## 下一步推荐顺序
 
-1. 在目标 Linux/WSL 发行版复现隔离依赖与 124 项非便携测试，整理成可重复的命令或 CI 作业。
+1. 在目标 Linux/WSL 发行版补齐 `python3-venv` / `ensurepip` 后，复现隔离依赖与 131 项非便携测试，整理成可重复的命令或 CI 作业。
 2. 明确交付目标是 WSL 编辑加 Windows 发布，还是 Linux 服务运行；后者需实现并验收平台启动、管理、浏览器和迁移流程。
-3. 执行 Windows `scripts/check.ps1`，回归新增设置、饮食、训练模板、导入和二维码界面。
+3. 后续源码修改后执行 Windows `scripts/check.ps1`，回归设置、饮食、训练模板、导入和二维码界面。
 4. 确认发布版本号、API 修订号和能力清单后，另行构建并验收新便携包；推送源码不会升级现有 Release。
 
 开始任何数据迁移前必须明确源与目标、停服和备份方案；禁止用正式健康库作为移植试验材料。

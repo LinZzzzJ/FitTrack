@@ -42,10 +42,14 @@ Windows10为兼容目标，尚未在其他PC或纯净虚拟机实测；清理开
 
 只读探测 WSL 及工具归属，不安装 Linux 依赖、不修改 WSL 配置，不将其计为 Linux 测试通过。Linux 候选命令、已确认平台依赖和未解问题均在[环境](environment.md)、[移植](migration.md)与[问题清单](open_questions.md)中明确标注。
 
-## 2026-10-23 · 当前 `main` 源码检查（非便携包验收）
+## 2026-10-24 · 当前 `main` 源码检查（非便携包验收）
 
-当前 `main` 源码包含 API 修订号 3 的静息消耗估算、文字餐食 AI、扩展营养、训练模板与导入/二维码功能。`APP_VERSION`、`pyproject.toml` 和已有版本标签仍为 v0.4.0；本节不替代或修改上方 v0.4.0 便携版结果。
+当前 `main` 源码包含 API 修订号 5 的静息消耗估算、文字餐食 AI、精确餐食 4/4/9 热量计算、扩展营养、训练模板与导入/二维码功能。`APP_VERSION`、`pyproject.toml` 和已有版本标签仍为 v0.4.0；本节不替代或修改上方 v0.4.0 便携版结果。
 
-在隔离的 Linux Python 3.14 环境中，排除 Windows 专属 `tests/test_portable.py` 后，124 项 pytest 通过、2 项 Windows 专属测试跳过；Ruff 通过，Svelte/TypeScript 检查为 0 错误、0 警告，Vite 生产构建成功。全量 Linux pytest 会有 5 项 Windows 启动器/注册表测试因缺少 `ctypes.windll`、`winreg` 等平台 API 而失败；这不是 Linux 全功能验收。
+最近一次已记录的隔离 Linux Python 3.14 检查排除 Windows 专属 `tests/test_portable.py` 后，131 项 pytest 通过、2 项 Windows 专属测试跳过；Ruff、Svelte/TypeScript（0 错误、0 警告）和 Vite 生产构建通过。全量 Linux pytest 会有 Windows 启动器/注册表测试因缺少 `ctypes.windll`、`winreg` 等平台 API 而失败；这不是 Linux 全功能验收。本轮 WSL 环境缺少 `ensurepip`，未能重建 Linux venv，故未复跑这组 Linux 检查。
 
-**尚未验证：**Windows `scripts/check.ps1`、新功能的 Windows 浏览器流程、使用这些能力重建的便携 ZIP、Linux 原生启动与管理、跨操作系统根目录迁移及真实 AI 提供方调用。自动测试使用模拟 AI；未读取正式健康数据或个人 Key。
+**尚未验证：**使用这些能力重建的便携 ZIP、Linux 原生启动与管理、跨操作系统根目录迁移及真实 AI 提供方调用。自动测试使用模拟 AI；未读取正式健康数据或个人 Key。
+
+## 2026-10-24 · 餐食 AI/精确录入双模式
+
+最近一次已记录的 Linux 定向回归为 69 项通过，覆盖精确模式创建/编辑时的服务端 4/4/9 kcal 重算、忽略客户端热量、空重量、描述/整餐单项约束、超限拒绝、标签模式互斥和旧标签/餐食兼容。本轮 Windows `scripts/check.ps1` 通过 142 项 pytest、Ruff、Svelte/TypeScript（0 错误、0 警告）和生产构建；Windows Edge 隔离浏览器流程验证 AI/精确模式切换时清空精确营养输入、重新填写后按 4/4/9 入账、AI 来源清除、标签/旧餐食及营养统计，运行时错误为 0。自动 AI 使用模拟对象，没有访问用户数据库、图片或个人 Key。新便携包仍未构建或验收。

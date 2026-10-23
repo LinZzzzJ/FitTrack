@@ -165,7 +165,9 @@
             <div class="meal-card-body">
               <span class="eyebrow"
                 >{slots[meal.slot]} · 已入账{#if meal.nutrition_label}
-                  · 标签换算{/if}</span
+                  · 标签换算{:else if meal.nutrition_mode === "precise"}
+                  · 精确录入{:else if meal.nutrition_mode === "estimate"}
+                  · AI 估算{/if}</span
               >
               <h4>
                 {meal.title ||
@@ -178,7 +180,7 @@
                 {meal.items
                   .map(
                     (item) =>
-                      `${item.name} ${number(item.estimated_edible_grams, 1)}g`,
+                      `${item.name} ${item.estimated_edible_grams == null ? "重量未录" : `${number(item.estimated_edible_grams, 1)} g`}`,
                   )
                   .join(" · ")}
               </p>

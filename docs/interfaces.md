@@ -1,6 +1,6 @@
 # 接口、任务与数据格式合约
 
-当前开发工作区 API 修订号 3，尚未作为新功能版本发布。以下根据 `models.py`、`routes.py`、`management_routes.py`、`store.py`、`coaching.py` 和 `storage_ops.py` 整理；修改接口时同步前端 `web/src/lib/types.ts`、任务与恢复校验。
+已发布 v0.4.0 便携版为 API 修订号 2；当前 `main` 源码为 API 修订号 3。应用版本字段仍是 v0.4.0，新增能力尚未打入并验收新便携包。以下根据 `models.py`、`routes.py`、`management_routes.py`、`store.py`、`coaching.py` 和 `storage_ops.py` 整理；修改接口时同步前端 `web/src/lib/types.ts`、任务与恢复校验。
 
 ## 通用规则
 
@@ -18,7 +18,7 @@
 | `GET /api/version` | `version`、`api_revision`、`capabilities`、`backend_build`、`restart_required`、`distribution`、`build_id`；不返回物理路径 |
 | `POST /api/auth/register`、`/login` | `username`、`password`；注册 201 并建立会话，登录返回用户 |
 | `POST /api/auth/logout` | 204；撤销当前会话并清理对应临时凭据 |
-| `GET /api/me` | `user`、`today`、`profile`、`ai`、`runtime`、`activities`、`activity_levels` |
+| `GET /api/me` | `user`、`today`、`profile`、`ai`、`runtime`、`activities`、`activity_levels`（五档活动标签与系数） |
 | `GET /api/profile?day=`、`PUT /api/profile` | 指定日期有效资料；保存完整参数版本，含 `effective_date` |
 | `GET /api/body?start=&end=`、`PUT /api/body` | 区间测量；按日期保存，可空体重/体脂/静息覆盖 |
 | `DELETE /api/body/{day}` | 204；删除当天测量，非删除资料版本 |
@@ -54,9 +54,9 @@
 
 | 模型 | 字段与约束 |
 |---|---|
-| `Profile` | `effective_date`、`height_cm` 90–240、`initial_weight_kg` 20–350、可空 `body_fat_pct`、`sex`、可空 `age` 13–110；静息能量可手填 500–5000，留空时须有年龄用于 Mifflin–St Jeor 估算；`activity_level` 为久坐/轻度/中度/高度/非常活跃，旧 `activity_factor` 仍兼容。资料读取响应另含 `estimated_resting_kcal`、`estimated_maintenance_kcal`，保存请求不接受这两个派生字段 |
+| `Profile` | `effective_date`、`height_cm` 90–240、`initial_weight_kg` 20–350、可空 `body_fat_pct`、`sex`、可空 `age` 13–110；静息能量可手填 500–5000，留空时须有年龄用于 Mifflin–St Jeor 估算；`activity_level` 为久坐/轻度/中度/高度/非常活跃，对应系数 1.2/1.375/1.55/1.725/1.9，旧 `activity_factor` 仍兼容。资料读取响应另含 `estimated_resting_kcal`、`estimated_maintenance_kcal`，保存请求不接受这两个派生字段 |
 | `BodyRecord` | `date`、可空 `weight_kg`/`body_fat_pct`/`resting_kcal`、`note`；缺失测量不是零 |
-| `FoodItem` | `name`、`consumed_part`、`estimated_edible_grams`、`kcal`、三大营养素必需；`fiber_g`、`sugar_g` 可空克数，`sodium_mg` 可空毫克。未知保持空值，旧记录读取兼容 |
+| `FoodItem` | `name`、`consumed_part`、`estimated_edible_grams`、`kcal`、三大营养素必需；`fiber_g`、`sugar_g` 可空克数，`sodium_mg` 可空毫克。旧 JSON 缺这些键时按未知处理 |
 | `Meal` | `date`、`slot=breakfast/lunch/dinner/snack`、`title`、`note`、`assumptions`、1–50 项 `items`、可空 `image_id`/`source_job_id`/`nutrition_label` |
 | `Workout` | `date`、`title`、`kind=strength/cardio`、`activity`、`duration_minutes` (0,1440]、`intensity=light/moderate/vigorous`、可空 `met` 1–25、`net_kcal_override`、`plan_id`、`ai_estimate_job_id` |
 | `Exercise` / `TrainingSet` | 动作 `name`、`sets`；每组 `reps` 和总外加 `weight_kg`，自重为 0 外加重量 |
@@ -73,12 +73,12 @@
 - 标签字段：`name`、`basis_kind=per_100g/per_serving/per_pack`、`basis_grams`、`energy_value`、`energy_unit=kJ/kcal`、`protein_g`、`carbs_g`、`fat_g`、可选 `fiber_g`、`sugar_g`、`sodium_mg`、`assumptions`。**读取草稿允许空值，计算确认不允许缺必要热量和三大营养素。**
 - 份量：`mode=grams` 使用 `grams`；`mode=packs` 使用 `pack_grams × packs`，支持小数袋数。照片中出现几袋不代表实际吃几袋。
 - `basis_kind=per_100g` 的基准重量按 100g，其他基准需要对应重量；具体完整性检查见 `nutrition.label_food`。
-- `kcal = (kJ / 4.184 或原 kcal) × 实际克数 / 基准克数`，三大营养素同倍率缩放。374 kJ/100g、60g 为约 53.63 kcal，120g 约 107.27 kcal。
+- `kcal = (kJ / 4.184 或原 kcal) × 实际克数 / 基准克数`，已知营养项按同倍率缩放。374 kJ/100g、60g 为约 53.63 kcal，120g 约 107.27 kcal。
 - 保存 `Meal.nutrition_label` 时后端重算 `items`，不信任客户端伪造的预览值。快照随餐食保存和备份；删除分析来源不移除标签快照。
 
 ## AI 任务合约
 
-`JobRequest` 公共字段：`kind`、`date`、`request_key`（8–100 字符）；可选 `image_id`、`note`、`slot`。`meal` 可用照片、`meal_description` 文字描述或二者组合；`meal_mode=label` 仍要求照片。按用户和 `request_key` 幂等；手动重试生成新请求标识，网络重发同一请求使用原标识。
+`JobRequest` 公共字段：`kind`、`date`、`request_key`（8–100 字符）；可选 `image_id`、`note`、`slot`。普通 `meal` 至少提供照片或 3–4000 字符的 `meal_description`，也可两者都提供；`meal_mode=label` 仍要求照片且不能带 `meal_description`。按用户和 `request_key` 幂等；手动重试生成新请求标识，网络重发同一请求使用原标识。
 
 | kind | 附加输入 | 结果及入账边界 |
 |---|---|---|
@@ -90,7 +90,9 @@
 
 `goal_profile`、`cardio_input` 和 `week_start` 只能用于对应任务；非餐食不能使用标签模式。周报告需服务端认定周期已结束，七天都有确认餐食和完成状态；同周不并发重算。最新任务失败不删除上一份成功报告。
 
-训练交换在浏览器本地完成：模板 JSON 为 `{format:"fittrack-training",version:1,templates:[...]}`；单模板二维码为 `{format:"fittrack-template",version:1,template:{...}}`，最多 2900 UTF-8 字节。排期 JSON 使用同一 `fittrack-training`/`version:1` 外壳和 `plans:[...]`。CSV 由用户映射日期、训练名、动作、组数、次数、重量和可选时长列；日期与训练名相同的动作行合并为一条待训练排期。导入排期不会自动生成实际训练。
+训练交换在浏览器本地完成，不会调用第三方软件 API：模板 JSON 为 `{format:"fittrack-training",version:1,templates:[...]}`；单模板二维码为 `{format:"fittrack-template",version:1,template:{...}}`，UTF-8 载荷最多 2900 字节。排期 JSON 使用同一 `fittrack-training`/`version:1` 外壳和 `plans:[...]`；导入后状态重置为 `planned`，不携带原有记录 ID。文件导入限制为 20 MiB，模板 JSON 载荷限制为 100 KiB。
+
+CSV 导入先由用户映射日期、训练名、动作、组数、次数、重量和可选时长列；CSV 最多 100,000 行。日期与训练名相同的有效动作行合并为一条待训练排期，无效行跳过。若后端保存过程中失败，已经保存的排期不会自动回滚。导入排期不会自动生成实际训练。二维码摄像头扫描需要安全上下文（HTTPS 或 localhost）；也可上传二维码图片。
 
 任务状态为 `queued` → `running` → `done` 或 `failed`；重启/恢复后未完成任务转为 `interrupted`，不自动重发。`stale` 是源记录变化标记，不是新的执行状态。凭据快照仅传到工作线程，不写任务请求或结果。
 

@@ -1,6 +1,6 @@
 # 网页部署技术评估
 
-FitTrack共用Svelte/TypeScript前端和FastAPI/Python后端，前端构建由后端提供，浏览器通过同源/api访问。当前交付为Windows本机便携版；源码保留服务器模式基础，尚未完成公网部署验收。
+FitTrack共用 Svelte/TypeScript 前端和 FastAPI/Python 后端，前端构建由后端提供，浏览器通过同源 `/api` 访问。已发布交付为 v0.4.0 Windows 本机便携版（API 修订号 2）；当前 `main` 源码 API 修订号为 3，包含后续训练与饮食能力。服务器模式仍未完成公网部署验收。
 
 ## 两种运行方式
 
@@ -18,7 +18,9 @@ FitTrack共用Svelte/TypeScript前端和FastAPI/Python后端，前端构建由�
 
 ## 已有接口基础
 
-源码包含local/server能力开关、Host/Origin检查、HTTPS Secure Cookie、可信代理参数、AI提供方HTTPS允许列表、账号与个人凭据隔离，以及服务器禁用本机文件系统和进程管理能力的测试。
+源码包含 local/server 能力开关、Host/Origin 检查、HTTPS Secure Cookie、可信代理参数、AI 提供方 HTTPS 允许列表、账号与个人凭据隔离，以及服务器禁用本机文件系统和进程管理能力的测试。当前 API 3 源码的训练模板、计划文件导入和饮食 AI 可由同源网页调用；它们尚未包含在 v0.4.0 便携包验收中。
+
+训练模板二维码可上传图片解码；摄像头扫码依赖安全上下文，部署时使用 HTTPS（localhost 开发除外）并由用户明确授权摄像头。拒绝权限或无摄像头时，仍可用图片扫码和 JSON 文件交换。
 
 当前使用单个应用进程，AI线程池全局并发上限为2，任务持久化到个人SQLite，SSE推送进度。不能直接通过增加Uvicorn worker获得正确的多进程队列行为；扩大规模需共享数据库、外部队列及协调机制。
 

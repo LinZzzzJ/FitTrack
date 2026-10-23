@@ -1,6 +1,6 @@
 # FitTrack AI 开发指南
 
-FitTrack · 轻衡是本地优先的身体、饮食和训练日记。当前公开基线为 v0.4.0、API 修订号 2；交付形态是 Windows x64 便携版。服务器模式已有部分接口与测试，Linux/WSL 完整运行和公网部署尚未验收。
+FitTrack · 轻衡是本地优先的身体、饮食和训练日记。已发布基线为 v0.4.0、API 修订号 2；当前 `main` 源码 API 修订号为 3，包含后续训练、饮食功能，但尚无对应的新便携包验收。服务器模式已有部分接口与测试，Linux/WSL 完整运行和公网部署尚未验收。版本、验证范围和下一步以 [当前状态](docs/current_status.md) 为准。
 
 ## 接手顺序
 
@@ -15,6 +15,7 @@ FitTrack · 轻衡是本地优先的身体、饮食和训练日记。当前公�
 - `app.create_app` / `routes` / `management_routes`：生命周期、访问保护、HTTP 合约。
 - `paths.RuntimePaths` / `control.WorkspaceHub`：受控根目录、控制库与个人工作区。
 - `store` / `calculations` / `nutrition` / `coaching`：记录、确定性汇总、标签换算与周资格。
+- `WorkoutTemplate`、`/workout-templates` 和 `/workout-days`：个人训练模板、账号隔离与训练日历记录标记；导入格式见接口文档。
 - `credentials.CredentialStore` / `ai.AIClient` / `jobs.JobRunner` / `events.EventBus`：个人凭据、AI 合约、后台线程和 SSE。
 - `web/src/pages`、`web/src/components`、`web/src/lib`：Svelte 页面、组件、类型和共用状态。
 - `tools`、`scripts`、`release-docs`：Windows 打包、检查和成品指南；不要当作 Linux 启动配方。
@@ -39,6 +40,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1
 - 密码、API Key、会话令牌、真实图片及私人路径不得进入日志、文档、截图、前端或 Git。当前生产路径使用个人 `CredentialStore`，不得恢复公共 Key 回退。
 - 日期使用 `Asia/Shanghai`、接口使用 `YYYY-MM-DD`。统计起点 `2026-10-15` 与历史补录边界不同，不得随意修改。
 - 热量和营养汇总由后端确定性计算；AI 输出须校验、预览和人工确认，不能自动改目标或入账。
+- 静息消耗估算必须与设备/手动值区分；营养未知值保持为空，不得补零。当前扩展营养项为膳食纤维、总糖和钠。
+- 新增个人模板时同步检查备份白名单与旧 v1 健康 ZIP 恢复；当前健康 ZIP v2 包含模板。
 - AI 测试默认离线模拟；真实调用需用户授权，不自动重发超时请求。服务重启后的未完成任务标为中断。
 - 保持 API 修订号、请求指纹、幂等确认及备份格式兼容；字段变化先检查前端类型、恢复校验和旧记录。
 - 不强杀用户浏览器或不属于本应用的进程。Windows 文件操作用明确绝对路径和 `-LiteralPath`，复制/迁移核验哈希并保留原档。
@@ -59,4 +62,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1
 | 未解问题和证据缺口 | [open_questions](docs/open_questions.md) |
 | 公网路线与本机模式差异 | [WEB_DEPLOYMENT_ASSESSMENT](docs/WEB_DEPLOYMENT_ASSESSMENT.md) |
 
-修改后运行相关检查，更新当前状态、对应专题和 [版本进展](docs/PROGRESS.md)。文档应区分已确认事实、已验证方案、讨论但未验证、推断和待确认，并给出版本、代码/测试或讨论主题依据。保留 `ARCHITECTURE.md` 等现有大小写，不创建仅大小写不同的重复文件。
+修改后运行相关检查，更新当前状态、对应专题、用户指南与 [版本进展](docs/PROGRESS.md)。同一功能涉及 API、数据恢复、用户流程或平台边界时，检查 `README.zh-CN.md`、`README.md`、`interfaces.md`、`ARCHITECTURE.md`、`ACCEPTANCE.md`、`migration.md` 和部署评估中的旧描述。文档应区分已确认事实、已验证方案、讨论但未验证、推断和待确认，并给出版本、代码/测试或讨论主题依据。保留 `ARCHITECTURE.md` 等现有大小写，不创建仅大小写不同的重复文件。

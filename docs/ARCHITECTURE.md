@@ -1,6 +1,6 @@
 # 架构与计算
 
-本文描述公开 v0.4.0 的实现，知识核对日期为2026-10-20。先读 [当前状态](current_status.md) 判断版本与验证范围；字段合约见 [interfaces](interfaces.md)，设计原因见 [decisions](decisions.md)，平台依赖见 [migration](migration.md)。已有功能不代表 Linux/公网已经验收。
+本文记录已发布 v0.4.0 基线及当前 `main` 后续源码，核对日期为 2026-10-23。当前源码 API 修订号为 3，但便携发行仍为 v0.4.0/API 2；平台验证范围见 [当前状态](current_status.md) 与 [验收](ACCEPTANCE.md)。字段合约见 [interfaces](interfaces.md)，设计原因见 [decisions](decisions.md)，平台依赖见 [migration](migration.md)。源码功能不等于便携版或 Linux/公网验收。
 
 ## 总体关系与入口
 
@@ -45,13 +45,13 @@ flowchart LR
 | profiles | 每人按生效日期保存的完整参数版本 |
 | bodies | 每人每天唯一测量；体重、体脂、静息覆盖可空 |
 | images | 用户所有权与图片 SHA-256；物理文件不可变、去重 |
-| entries | 餐食、训练与排期的类型化 JSON；组记录嵌在训练中；按用户、类型、日期索引 |
+| entries | 餐食、实际训练与排期的类型化 JSON；组记录和排期动作明细嵌入记录；按用户、类型、日期索引 |
 | jobs | 请求、类型、状态、结果、错误、源数据指纹；用户＋request_key 唯一 |
 | feedback | 每日反馈与源数据指纹，旧请求不能覆盖更新的请求结果 |
 | days | 当前用户的当日完成状态 |
 | workout_templates | 当前用户的可复用训练模板；动作与默认组数保存在模板 JSON 中 |
 
-0.2 的账号、会话、工作区映射、凭据及 metadata 位于 `R/control/accounts.sqlite3`；profiles 至 days 位于每个个人工作区的 `fittrack.sqlite3`。个人数据库仅有 owners 归属标识，不含账号密码、会话或 AI 密文。工作区分派必须有当前用户 ID，控制库保存相对根目录的路径。旧单库仅保留为显式升级读取及旧版合约回归用途，生产启动始终使用 WorkspaceHub 和 CredentialStore。
+0.2 起的账号、会话、工作区映射、凭据及 metadata 位于 `R/control/accounts.sqlite3`；个人 profiles、bodies、entries、jobs、days 和 workout_templates 位于每个个人工作区的 `fittrack.sqlite3`。个人数据库仅有 owners 归属标识，不含账号密码、会话或 AI 密文。工作区分派必须有当前用户 ID，控制库保存相对根目录的路径。旧单库仅保留为显式升级读取及旧版合约回归用途，生产启动始终使用 WorkspaceHub 和 CredentialStore。
 
 启用 SQLite 外键、WAL、busy_timeout、内存临时表，数据库操作由可重入锁协调，首次账号分配和目录映射切换使用事务。实例锁放在 `R/runtime`。根目录格式版本为 2；个人健康表仍为 user_version=1，拒绝打开更新版本数据库。迁移通过显式导入完成，不在原库中隐式拆表。
 
@@ -63,7 +63,7 @@ flowchart LR
 
 统计起点统一为 `2026-10-15`：后端 calculations.TRACKING_START、前端 lib/tracking.ts 的同名常量。首页、身体记录和趋势分析共用状态加载，按每次最多 366 个日期分段请求；每段传入相同的 `measurement_start`，七日平均查询的下界为 max(当天−6天, measurement_start)，保证跨段连续且排除起点前测量。图表终点跟随所选日期；历史录入接口不受图表起点限制。
 
-运动体重选择顺序：当日测量 → 当日之前最近的体重 → 初始体重，不使用未来体重。静息能量使用当日覆盖、个人手动值或估算值。估算使用 Mifflin–St Jeor：男性 `10×体重+6.25×身高−5×年龄+5`，女性常数项为 `−161`；选择“其他”时使用两者常数项均值。年龄缺失时要求手动填写静息能量。日常活动等级系数为久坐 1.2、轻度 1.375、中度 1.55、高度 1.725、非常活跃 1.9；旧资料仍可使用其自定义系数。该估计不构成实测或医疗建议。
+运动体重选择顺序：当日测量 → 当日之前最近的体重 → 初始体重，不使用未来体重。静息能量使用当日覆盖、个人手动值或公式估算。估算使用 Mifflin–St Jeor：男性 `10 × 体重kg + 6.25 × 身高cm − 5 × 年龄 + 5`，女性将常数项改为 `−161`；选择“其他”时使用两种常数项的平均值。年龄缺失时须填写静息能量。日常活动等级系数为久坐 1.2、轻度 1.375、中度 1.55、高度 1.725、非常活跃 1.9；历史自定义 `activity_factor` 继续兼容。估算值不是设备实测，也不构成医疗建议。
 
 ```text
 运动总消耗 = MET × 体重 kg × 时长分钟 / 60
@@ -72,7 +72,7 @@ flowchart LR
 估计日缺口 = 估计日消耗 − 已确认餐食热量
 ```
 
-活动系数默认 1.2，是可调整的估算假设。运动支持手动 MET 或运动净消耗覆盖（包括 0）。力量消耗按整次训练时长计算，逐组重量 × 次数只用于训练量。自重动作按外加重量 0 记录，保留组数与次数。
+新资料以活动等级选择日常系数；读取没有 `activity_level` 的旧资料时沿用其自定义 `activity_factor`，未设置时回退到 1.2。运动支持手动 MET 或运动净消耗覆盖（包括 0）。力量消耗按整次训练时长计算，逐组重量 × 次数只用于训练量。自重动作按外加重量 0 记录，保留组数与次数。
 
 MET 来源于 [2024 Compendium](https://pacompendium.com/) 的 [力量与器械运动](https://pacompendium.com/conditioning-exercise/)、[跑步](https://pacompendium.com/running/)、[步行](https://pacompendium.com/walking/)、[骑行](https://pacompendium.com/bicycling/)；不同强度映射为选定的参考活动，个体结果并非精确测量。
 
@@ -90,7 +90,7 @@ MET 来源于 [2024 Compendium](https://pacompendium.com/) 的 [力量与器械�
 
 目标生成使用同一个文字建议模型，输出上限 1536 tokens。`POST /api/jobs` 提交 `kind=goals` 与 `goal_profile`（完整表单草稿，目标体重必填）。未保存身体资料也可生成；不读取其他用户数据，不保存或自动覆盖资料与目标。结果以 `goals`、`basis` 与 `stale` 返回并保存在任务中；前端展示推荐理由、克数和按 4/4/9 换算的供能比例，用户采用后还需保存表单。
 
-估计维持消耗为“草稿静息能量或当日覆盖 × 活动系数 ＋ 近七个日历日已记录运动净消耗的日均值”。体重优先使用截至当天最近测量，无测量时回退草稿初始体重；没有记录的饮食保留空值，不把未记录运动推测为已经训练。不会把原有热量和营养目标传入模型影响新建议，也不编造年龄或达标期限。
+估计维持消耗为“草稿静息能量、估算静息能量或当日覆盖 × 日常活动等级系数 ＋ 近七个日历日已记录运动净消耗的日均值”。体重优先使用截至当天最近测量，无测量时回退草稿初始体重；没有记录的饮食保留空值，不把未记录运动推测为已经训练。不会把原有热量和营养目标传入模型影响新建议；资料未提供年龄时不编造年龄或达标期限。
 
 AI 输出经 Pydantic 验证正数、上限和供能一致性，三大营养素与热量的误差不得超过 20 kcal 或 2%（取较大值）。本应用采用温和调整规则：减重缺口最多为维持消耗的 20% 且不超过 500 kcal；增重盈余最多 10% 且不超过 300 kcal；维持摄入与估计消耗相差不超过 5%。这些是本应用的初始建议约束，不是对个人的医疗处方。低于 1000 kcal 的模型输出直接拒绝；这个校验下限参考 [NIDDK Body Weight Planner](https://www.niddk.nih.gov/bwp)，不代表推荐摄入值。健身蛋白质提示参考 [ISSN 的 protein and exercise 立场文件](https://pmc.ncbi.nlm.nih.gov/articles/PMC5477153/)，缺少健康资料时只提供通用起点。
 
@@ -100,7 +100,7 @@ AI 输出经 Pydantic 验证正数、上限和供能一致性，三大营养素�
 
 识图副本在内存中纠正 EXIF 方向、转 RGB 并去除元数据，长边最多 4096 px，不放大小图；JPEG 质量 92、保留完整色度，超过 8 MiB 时继续等比缩小。全程不裁边、不覆盖本地原图，仍以 Base64 和 detail=high 发送，不需要公开图片网址。较此前 1600 px/质量85策略保留更多输入细节，可能增加传输量；[DeepSeek 仍会按内部规则等比缩放](https://api-docs.deepseek.com/zh-cn/guides/vision/)，不保证小字和反光标签可准确识别。图片上传限制仍为 12 MB / 4000 万像素。
 
-包装食品提示区分每100克/每份/整包，按实际重量缩放，标签 kJ 除以 4.184 换算 kcal；NRV 不当作克数，每袋重量不静默等同食用袋数。普通餐食的热量和三大营养素仍要求完整数字字段；纤维、总糖和钠可为空。手动餐食可用文字描述和可选照片生成营养草稿；标签模式的 `LabelReadout` 可保留未知项，已知标签字段由 `nutrition.label_food` 确定性换算。未知值不填零，AI 草稿确认前不入账。验证失败只显示安全字段诊断，不回传原始模型值、未知字段名或服务响应。
+包装食品提示区分每 100 克/每份/整包，按实际重量缩放，标签 kJ 除以 4.184 换算 kcal；NRV 不当作克数，每袋重量不静默等同食用袋数。普通餐食的热量和三大营养素仍要求完整数字字段；纤维、总糖和钠可为空。手动录餐可用文字描述，或文字加可选照片，生成可编辑营养草稿。营养合计若有食物缺少对应微量字段，该项合计为空而不是零。标签模式的 `LabelReadout` 可保留未知项，已知标签字段由 `nutrition.label_food` 确定性换算。AI 草稿确认前不入账；验证失败只显示安全字段诊断，不回传原始模型值、未知字段名或服务响应。
 
 反馈使用当日及此前六天的资料、身体测量、已确认饮食和实际训练，以及今日/次日排期，不包含用户名、密码或密钥。请求前保存数据指纹，修改、补录或生成期间变化时标记过期，不覆盖用户记录。普通编辑不调用 AI。
 
@@ -112,7 +112,7 @@ AI 输出经 Pydantic 验证正数、上限和供能一致性，三大营养素�
 
 每周上下文包含七天资料、目标、实际饮食、训练及可用测量，统计由后端计算，未提供的消耗/缺口或身体趋势保留空值。文字模型上限 2048 tokens，返回 summary、diet_findings、training_findings、next_week_plan 和 limitations；记录变化时重新计算源指纹，标记报告过期。GET 状态分别选择最新成功报告和最新任务，重新生成失败不抹掉旧报告。完成日期的接口独立于每日 AI，不要求每天都生成反馈。
 
-两种新任务复用个人 Key、文字模型、任务队列与健康库 jobs 表，无数据库版本变化。备份校验接受新请求和结果结构，检查有氧来源任务与保存训练的关联，允许合法的历史过期来源；跨账号导入会重新归属，不携带凭据。恢复后的未完成任务标为 interrupted，不自动发送模型请求。
+目标、有氧和餐食 AI 任务复用个人 Key、文字/识图模型、任务队列和 jobs 表。训练模板以新个人表保存；健康 ZIP 升为 v2 并携带模板，同时继续导入不含模板表的 v1 ZIP。备份校验检查 AI 请求/结果、模板模型和有氧来源与训练的关联；跨账号导入会重新归属，不携带凭据。恢复后的未完成任务标为 interrupted，不自动发送模型请求。
 
 全体 /api（登录/注册除外）要求会话。所有图片、记录、任务、管理操作及事件校验所属用户；AI 配置改为每账号独立，管理员只增加本机根目录迁移/停止等管理能力，不扩大他人健康记录访问。Host/Origin 在本机模式限回环及明确的 Vite 开发源，服务器模式按部署域名和 HTTPS Origin 检查。静态 .js/.mjs 显式设置 JavaScript MIME。
 
@@ -124,7 +124,7 @@ CredentialStore 不读取公共环境 Key。默认 Fernet 加密到控制库，�
 
 数据管理操作使用单线程池，将状态存入 `R/runtime/operations`。开始前等待该账号 AI 任务结束，暂停该账号写入；耗时复制期间不持有全局账号锁，其他账号仍可写入。个人迁移用 SQLite backup API 获取一致副本，校验 integrity_check、各表记录数和图片 SHA-256，再事务更新映射及旧档登记。旧工作区保留并标记 retired。
 
-健康 ZIP v2 使用白名单 manifest 与 hash 命名图片，包含个人训练模板；仍可导入不含模板表的健康 ZIP v1。限制 512 MiB 压缩、2 GiB 解压、10002 个文件、32 MiB manifest；拒绝额外路径、重复文件、链接和无效归属。导入时将所有记录归入当前账号，在新工作区校验后切换。恢复不覆盖当前库，备份不包含密码、凭据或主密钥。本机备份写入根目录，不自动下载；服务器提供主动下载。
+健康 ZIP v2 使用白名单 manifest 与 hash 命名图片，包含个人训练模板；仍可导入不含模板表的健康 ZIP v1。个人 SQLite `user_version` 仍为 1，模板通过创建表兼容既有工作区。归档限制为 512 MiB 压缩、2 GiB 解压、10002 个文件、32 MiB manifest；拒绝额外路径、重复文件、链接和无效归属。导入时将所有记录归入当前账号，在新工作区校验后切换。恢复不覆盖当前库，备份不包含密码、凭据或主密钥。本机备份写入根目录，不自动下载；服务器提供主动下载。
 
 整根迁移在 HTTP 服务停止、线程任务结束、数据库关闭后执行，迁移期间保留原实例锁。复制非临时文件并逐文件校验，验证账号库及个人库和凭据，再重新绑定快捷方式、重启并核对新实例就绪。旧根目录保留。旧版导入仅在新根目录暂存区进行 SQLite 恢复读取，保留 ID 和密码哈希，不导入会话；原管理员明文 Key 确认加密后从旧配置移除。
 
@@ -132,7 +132,7 @@ CredentialStore 不读取公共环境 Key。默认 Fernet 加密到控制库，�
 
 ## 主要接口
 
-0.3新增 `version`（载入时后端源码指纹、API修订号2及能力）、`nutrition`（确定性标签计算）。`GET /api/version`无需登录，遵守Host/Origin保护，仅返回非敏感版本信息；前端提交前检查接口版本、能力和重启标志，旧后端404时不发送表单。后端源码变动后除认证及本机管理外暂停写入，正常重启后恢复；没有吞掉不认识字段来兼容旧后台。
+v0.3 新增 `version`（载入时后端源码指纹、当时的 API 修订号 2 及能力）和 `nutrition`（确定性标签计算）。当前 `main` API 修订号为 3。`GET /api/version` 无需登录，遵守 Host/Origin 保护，仅返回非敏感版本信息；前端提交前检查接口版本、能力和重启标志，版本不匹配时保留表单并阻止提交。后端源码变动后除认证及本机管理外暂停写入，正常重启后恢复；不会吞掉不认识字段来兼容旧后台。
 
 饮食周视图独立查询最多七天，支持统计起点之前的日期。顶部日期决定默认周，翻周不改变记录归属日期；异步查询用代次丢弃过时结果，保存/任务进度后刷新。标签任务复用kind=meal，新增meal_mode=photo|label默认photo，label结果可包含null并保存为草稿；标签计算要求必要数值完整、有限且份量为正，按kJ/4.184及基准重量换算。Meal.nutrition_label保留原标签和份量，items由后端重算；重复确认、图片/任务归属及旧数据结构继续兼容。备份恢复会验证标签与营养结果一致，无SQLite表版本迁移。
 
@@ -141,12 +141,14 @@ CredentialStore 不读取公共环境 Key。默认 Fernet 加密到控制库，�
 - POST /api/uploads；GET /api/images/{id}?thumb=true。
 - POST、PUT /{id}、DELETE /{id}：/api/meals、/api/workouts、/api/plans。
 - GET /api/plans?start=&end=；POST /api/plans/{id}/complete。
+- GET /api/workout-days?start=&end= 返回实际训练日期；GET/POST/PUT/DELETE /api/workout-templates[/{id}] 管理账号私有模板。
 - GET /api/days/{date}；POST /api/days/{date}/complete；GET /api/trends?start=&end=&measurement_start=（最长 366 个日期，measurement_start 可选）。
 - GET /api/weekly-review?week_start=：周期、完成进度、缺失原因、资格、运行任务及最新成功报告；日期可省略。
 - POST /api/jobs；GET /api/jobs/{id}；GET /api/events。
 - DELETE /api/jobs/{id}：仅删除当前账号已结束的餐食分析。成功204，不存在/越权/非餐食任务404，排队或运行中409。单个事务解除餐食的来源字段后删除任务，保留餐食、标签快照和图片；通过当前账号的job_deleted事件刷新页面，不改变营养汇总或AI反馈指纹。
 - GET /api/version：版本、接口修订号、能力、后端指纹及restart_required，不暴露路径。
 - GET /api/diet-history?start=&end=：最多七天的当前账号餐食、摄入及照片任务。
+- POST /api/jobs kind=meal：照片、文字描述或二者组合生成营养草稿；必须人工确认才入账。
 - POST /api/nutrition-label/preview：标签与份量换算，不写入健康记录。
 - PUT /api/settings、DELETE /api/settings/key、POST /api/settings/test-connection：当前账号个人配置。
 - GET /api/storage、/api/runtime；POST /api/storage/pick-directory、/migrate、/open；GET /api/storage/operations/{id}。

@@ -38,6 +38,14 @@ Windows10为兼容目标，尚未在其他PC或纯净虚拟机实测；清理开
 
 在独立公开源码工作区执行既有 `scripts/check.ps1`：Windows、Python3.12.7、129项pytest全部通过；Ruff通过；Svelte/TypeScript为0错误、0警告；Vite生产构建成功。全部自动AI使用模拟接口，没有调用个人Key、读取正式健康库或操作正式服务。
 
-此次变更新增9份专题文档、完善6份已有文档，应用版本保持v0.4.0/API修订号2，不生成或替换Release附件。101个已跟踪非Markdown文件的前后SHA-256一致；133个相对链接与路径大小写检查通过，敏感Key/令牌/私钥/私人路径及邮箱形态扫描无命中，并人工复核公开内容和事实字段。README、AGENTS、接口与移植四份文档通过GitHub Markdown API渲染检查，标题与表格正常；未为此次文档改动重跑浏览器业务或Linux验证。检查产物仅保存在忽略的 `artifacts/knowledge-check`。
+此次历史知识库变更新增9份专题文档、完善6份已有文档，应用版本保持 v0.4.0/API 修订号 2，不生成或替换 Release 附件。101 个已跟踪非 Markdown 文件的前后 SHA-256 一致；133 个相对链接与路径大小写检查通过，敏感 Key/令牌/私钥/私人路径及邮箱形态扫描无命中，并人工复核公开内容和事实字段。README、AGENTS、接口与移植四份文档通过 GitHub Markdown API 渲染检查。该段仅记录当时检查，不代表本轮文档验证。
 
-只读探测WSL及工具归属，不安装Linux依赖、不修改WSL配置，不将其计为Linux测试通过。Linux候选命令、已确认平台依赖和未解问题均在[环境](environment.md)、[移植](migration.md)与[问题清单](open_questions.md)中明确标注。
+只读探测 WSL 及工具归属，不安装 Linux 依赖、不修改 WSL 配置，不将其计为 Linux 测试通过。Linux 候选命令、已确认平台依赖和未解问题均在[环境](environment.md)、[移植](migration.md)与[问题清单](open_questions.md)中明确标注。
+
+## 2026-10-23 · 当前 `main` 源码检查（非便携包验收）
+
+当前 `main` 源码包含 API 修订号 3 的静息消耗估算、文字餐食 AI、扩展营养、训练模板与导入/二维码功能。`APP_VERSION`、`pyproject.toml` 和已有版本标签仍为 v0.4.0；本节不替代或修改上方 v0.4.0 便携版结果。
+
+在隔离的 Linux Python 3.14 环境中，排除 Windows 专属 `tests/test_portable.py` 后，124 项 pytest 通过、2 项 Windows 专属测试跳过；Ruff 通过，Svelte/TypeScript 检查为 0 错误、0 警告，Vite 生产构建成功。全量 Linux pytest 会有 5 项 Windows 启动器/注册表测试因缺少 `ctypes.windll`、`winreg` 等平台 API 而失败；这不是 Linux 全功能验收。
+
+**尚未验证：**Windows `scripts/check.ps1`、新功能的 Windows 浏览器流程、使用这些能力重建的便携 ZIP、Linux 原生启动与管理、跨操作系统根目录迁移及真实 AI 提供方调用。自动测试使用模拟 AI；未读取正式健康数据或个人 Key。

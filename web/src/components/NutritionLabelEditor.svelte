@@ -192,6 +192,9 @@
             required
           /></label
         >
+        <label>膳食纤维 / g<input type="number" min="0" max="2000" step="any" bind:value={snapshot.label.fiber_g} placeholder="标签未列可留空" /></label>
+        <label>总糖 / g<input type="number" min="0" max="2000" step="any" bind:value={snapshot.label.sugar_g} placeholder="标签未列可留空" /></label>
+        <label>钠 / mg<input type="number" min="0" max="100000" step="any" bind:value={snapshot.label.sodium_mg} placeholder="标签未列可留空" /></label>
       </div>
       <p class="small muted">
         以上数值使用同一个标签基准。NRV%不是克数；识别缺项保持空白，请按包装补充。
@@ -265,7 +268,7 @@
           )} g · 碳水 {number(result.carbs_g, 2)} g · 脂肪 {number(
             result.fat_g,
             2,
-          )} g
+          )} g · 纤维 {number(result.fiber_g, 2)} g · 糖 {number(result.sugar_g, 2)} g · 钠 {number(result.sodium_mg, 0)} mg
         </p>
         {#if !ready}<p class="goal-stale">
             标签或份量已变化，请重新计算。

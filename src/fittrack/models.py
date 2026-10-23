@@ -19,13 +19,21 @@ class Profile(Model):
     initial_weight_kg: float = Field(ge=20, le=350)
     body_fat_pct: float | None = Field(None, gt=0, le=70)
     sex: Literal["male", "female", "other"] = "male"
-    resting_kcal: float = Field(ge=500, le=5000)
+    age: int | None = Field(None, ge=13, le=110)
+    resting_kcal: float | None = Field(None, ge=500, le=5000)
     activity_factor: float = Field(1.2, ge=1, le=2.5)
+    activity_level: Literal["sedentary", "light", "moderate", "high", "very_active"] | None = None
     target_weight_kg: float | None = Field(None, ge=20, le=350)
     calorie_target: float | None = Field(None, gt=0, le=10000)
     protein_target_g: float | None = Field(None, gt=0, le=1000)
     carbs_target_g: float | None = Field(None, gt=0, le=2000)
     fat_target_g: float | None = Field(None, gt=0, le=1000)
+
+    @model_validator(mode="after")
+    def resting_source(self):
+        if self.resting_kcal is None and self.age is None:
+            raise ValueError("静息能量留空时需要填写年龄以生成估算")
+        return self
 
 
 class BodyRecord(Model):
@@ -44,6 +52,9 @@ class FoodItem(Model):
     protein_g: float = Field(ge=0, le=2000)
     carbs_g: float = Field(ge=0, le=5000)
     fat_g: float = Field(ge=0, le=2000)
+    fiber_g: float | None = Field(None, ge=0, le=2000)
+    sugar_g: float | None = Field(None, ge=0, le=2000)
+    sodium_mg: float | None = Field(None, ge=0, le=100000)
 
 
 class LabelReadout(Model):
@@ -55,6 +66,9 @@ class LabelReadout(Model):
     protein_g: float | None = Field(None, ge=0, le=2000)
     carbs_g: float | None = Field(None, ge=0, le=5000)
     fat_g: float | None = Field(None, ge=0, le=2000)
+    fiber_g: float | None = Field(None, ge=0, le=2000)
+    sugar_g: float | None = Field(None, ge=0, le=2000)
+    sodium_mg: float | None = Field(None, ge=0, le=100000)
     assumptions: list[str] = Field(default_factory=list, max_length=20)
 
 
@@ -116,6 +130,18 @@ class TrainingPlan(Model):
     intensity: Literal["light", "moderate", "vigorous"] = "moderate"
     status: Literal["planned", "skipped"] = "planned"
     note: str = Field("", max_length=2000)
+    exercises: list[Exercise] = Field(default_factory=list, max_length=30)
+
+
+class WorkoutTemplate(Model):
+    title: str = Field(min_length=1, max_length=100)
+    category: Literal["back", "chest", "arms", "shoulders", "legs", "core", "full_body", "custom"]
+    icon: str = Field("dumbbell", min_length=1, max_length=40)
+    kind: Literal["strength"] = "strength"
+    duration_minutes: float = Field(45, gt=0, le=1440)
+    intensity: Literal["light", "moderate", "vigorous"] = "moderate"
+    exercises: list[Exercise] = Field(min_length=1, max_length=30)
+    note: str = Field("", max_length=2000)
 
 
 class GoalProfile(Profile):
@@ -141,6 +167,7 @@ class JobRequest(Model):
     cardio_input: CardioInput | None = None
     week_start: date | None = None
     meal_mode: Literal["photo", "label"] = "photo"
+    meal_description: str | None = Field(None, min_length=3, max_length=4000)
 
     @model_validator(mode="after")
     def validate_goal_input(self):
@@ -154,6 +181,14 @@ class JobRequest(Model):
             raise ValueError("每周复盘任务必须且仅能包含周起始日期")
         if self.kind != "meal" and self.meal_mode != "photo":
             raise ValueError("标签模式仅用于餐食任务")
+        if self.kind == "meal" and self.meal_mode == "label" and self.meal_description:
+            raise ValueError("标签识别不能同时包含餐食描述")
+        if self.kind != "meal" and self.meal_description is not None:
+            raise ValueError("餐食描述仅用于餐食任务")
+        if self.kind == "meal" and self.meal_mode == "photo" and not (
+            self.image_id or self.meal_description
+        ):
+            raise ValueError("请提供餐食照片或文字描述")
         return self
 
 

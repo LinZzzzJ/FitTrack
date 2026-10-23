@@ -83,6 +83,26 @@ class FakeAI:
             "total_kcal": 52,
         }, {"total_tokens": 10}
 
+    def meal_description(self, config, description, note="", path=None):
+        return {
+            "items": [
+                {
+                    "name": "米饭和鸡胸肉",
+                    "consumed_part": "按文字描述估算",
+                    "estimated_edible_grams": 250,
+                    "kcal": 390,
+                    "protein_g": 38,
+                    "carbs_g": 52,
+                    "fat_g": 4,
+                    "fiber_g": None,
+                    "sugar_g": None,
+                    "sodium_mg": None,
+                }
+            ],
+            "assumptions": [description, note],
+            "total_kcal": 390,
+        }, {"total_tokens": 10}
+
     def feedback(self, config, context):
         return {
             "summary": "已记录摄入与估计消耗",

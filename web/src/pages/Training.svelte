@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import QRCode from "qrcode";
+  import jsQR from "jsqr";
+  import Papa from "papaparse";
   import {
     Dumbbell,
     Plus,
@@ -12,6 +15,16 @@
     Flame,
     Timer,
     Activity,
+    Download,
+    Upload,
+    QrCode,
+    Camera,
+    BicepsFlexed,
+    Brain,
+    Footprints,
+    HeartPulse,
+    PersonStanding,
+    MoveUpRight,
   } from "@lucide/svelte";
   import Modal from "../components/Modal.svelte";
   import CardioAssistant from "../components/CardioAssistant.svelte";
@@ -24,12 +37,48 @@
     notify,
     shiftDate,
   } from "../lib/state.svelte";
-  import type { Workout, Plan } from "../lib/types";
+  import type { Workout, Plan, WorkoutTemplate, Exercise } from "../lib/types";
   let draft = $state<Workout | null>(null),
     planDraft = $state<Plan | null>(null),
     deleting = $state<{ kind: "workouts" | "plans"; id: string } | null>(null);
   let month = $state(""),
-    monthPlans = $state<Plan[]>([]);
+    monthPlans = $state<Plan[]>([]),
+    workoutDates = $state<string[]>([]),
+    templates = $state<WorkoutTemplate[]>([]),
+    templateDraft = $state<WorkoutTemplate | null>(null),
+    qrTemplate = $state<WorkoutTemplate | null>(null),
+    qrDialog = $state(false),
+    qrSource = $state(""),
+    cameraOpen = $state(false),
+    qrError = $state(""),
+    importInput = $state<HTMLInputElement>(),
+    csvHeaders = $state<string[]>([]),
+    csvRows = $state<Record<string, string>[]>([]),
+    csvMapping = $state<Record<string, string>>({});
+  let qrVideo = $state<HTMLVideoElement>();
+  let qrFileInput = $state<HTMLInputElement>();
+  let cameraStream: MediaStream | null = null;
+  let scanFrame = 0;
+  const builtInTemplates: WorkoutTemplate[] = [
+    { title: "背部训练", category: "back", icon: "back", kind: "strength", duration_minutes: 45, intensity: "moderate", note: "", exercises: ["高位下拉", "坐姿划船", "单臂哑铃划船"].map((name) => ({ name, sets: [{ reps: 10, weight_kg: 0 }] })) },
+    { title: "胸部训练", category: "chest", icon: "chest", kind: "strength", duration_minutes: 45, intensity: "moderate", note: "", exercises: ["杠铃卧推", "上斜哑铃卧推", "绳索夹胸"].map((name) => ({ name, sets: [{ reps: 10, weight_kg: 0 }] })) },
+    { title: "手臂训练", category: "arms", icon: "arms", kind: "strength", duration_minutes: 40, intensity: "moderate", note: "", exercises: ["哑铃弯举", "绳索下压", "锤式弯举"].map((name) => ({ name, sets: [{ reps: 10, weight_kg: 0 }] })) },
+    { title: "肩部训练", category: "shoulders", icon: "shoulders", kind: "strength", duration_minutes: 40, intensity: "moderate", note: "", exercises: ["坐姿推举", "哑铃侧平举", "反向飞鸟"].map((name) => ({ name, sets: [{ reps: 10, weight_kg: 0 }] })) },
+    { title: "腿部训练", category: "legs", icon: "legs", kind: "strength", duration_minutes: 50, intensity: "moderate", note: "", exercises: ["深蹲", "罗马尼亚硬拉", "腿举"].map((name) => ({ name, sets: [{ reps: 10, weight_kg: 0 }] })) },
+  ];
+  let allTemplates = $derived([...builtInTemplates, ...templates]);
+  function templateIcon(category: WorkoutTemplate["category"]) {
+    return {
+      back: PersonStanding,
+      chest: HeartPulse,
+      arms: BicepsFlexed,
+      shoulders: MoveUpRight,
+      legs: Footprints,
+      core: Brain,
+      full_body: PersonStanding,
+      custom: Dumbbell,
+    }[category];
+  }
   const intensityNames = {
     light: "轻强度",
     moderate: "中等强度",
@@ -64,6 +113,7 @@
   );
   onMount(() => {
     month = app.date.slice(0, 7);
+    void api.get<WorkoutTemplate[]>("/workout-templates").then((value) => (templates = value));
   });
   async function loadMonth() {
     const selected = month;
@@ -72,10 +122,15 @@
     end.setUTCMonth(end.getUTCMonth() + 1);
     end.setUTCDate(0);
     try {
-      const result = await api.get<Plan[]>(
-        `/plans?start=${selected}-01&end=${end.toISOString().slice(0, 10)}`,
-      );
-      if (month === selected) monthPlans = result;
+      const last = end.toISOString().slice(0, 10);
+      const [result, recorded] = await Promise.all([
+        api.get<Plan[]>(`/plans?start=${selected}-01&end=${last}`),
+        api.get<string[]>(`/workout-days?start=${selected}-01&end=${last}`),
+      ]);
+      if (month === selected) {
+        monthPlans = result;
+        workoutDates = recorded;
+      }
     } catch (error) {
       notify(error instanceof Error ? error.message : "无法读取训练排期", true);
     }
@@ -90,18 +145,18 @@
     value.setUTCMonth(value.getUTCMonth() + amount);
     month = value.toISOString().slice(0, 7);
   }
-  function openWorkout(existing?: Workout, plan?: Plan) {
+  function openWorkout(existing?: Workout, plan?: Plan, template?: WorkoutTemplate) {
     draft = {
       date: plan?.date || app.date,
-      title: plan?.title || "力量训练",
-      kind: plan?.kind || "strength",
+      title: template?.title || plan?.title || "力量训练",
+      kind: template?.kind || plan?.kind || "strength",
       activity: plan?.activity || "strength",
-      duration_minutes: plan?.duration_minutes || 45,
-      intensity: plan?.intensity || "moderate",
+      duration_minutes: template?.duration_minutes || plan?.duration_minutes || 45,
+      intensity: template?.intensity || plan?.intensity || "moderate",
       met: null,
       net_kcal_override: null,
-      exercises: [],
-      note: plan?.note || "",
+      exercises: structuredClone(template?.exercises || plan?.exercises || []),
+      note: template?.note || plan?.note || "",
       plan_id: plan?.id || null,
       ai_estimate_job_id: null,
     };
@@ -122,6 +177,291 @@
         ai_estimate_job_id: existing.ai_estimate_job_id || null,
       };
   }
+  function makeTemplate() {
+    templateDraft = {
+      title: "我的训练模板",
+      category: "custom",
+      icon: "dumbbell",
+      kind: "strength",
+      duration_minutes: 45,
+      intensity: "moderate",
+      exercises: [{ name: "", sets: [{ reps: 10, weight_kg: 0 }] }],
+      note: "",
+    };
+  }
+  function editTemplate(value: WorkoutTemplate) {
+    templateDraft = structuredClone(value);
+  }
+  async function saveTemplate(event: SubmitEvent) {
+    event.preventDefault();
+    if (!templateDraft) return;
+    try {
+      const { id, ...body } = $state.snapshot(templateDraft);
+      const saved = id
+        ? await api.put<WorkoutTemplate>(`/workout-templates/${id}`, body)
+        : await api.post<WorkoutTemplate>("/workout-templates", body);
+      templates = id
+        ? templates.map((item) => (item.id === id ? saved : item))
+        : [...templates, saved];
+      templateDraft = null;
+      notify("训练模板已保存");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "训练模板保存失败", true);
+    }
+  }
+  async function deleteTemplate(value: WorkoutTemplate) {
+    if (!value.id || !confirm(`删除“${value.title}”模板？`)) return;
+    try {
+      await api.delete(`/workout-templates/${value.id}`);
+      templates = templates.filter((item) => item.id !== value.id);
+      notify("训练模板已删除");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "训练模板删除失败", true);
+    }
+  }
+  function downloadFile(name: string, content: string, type = "application/json") {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+  function downloadDataUrl(name: string, value: string) {
+    const anchor = document.createElement("a");
+    anchor.href = value;
+    anchor.download = name;
+    anchor.click();
+  }
+  function templatePayload(value: WorkoutTemplate) {
+    const { id: _id, ...template } = value;
+    return { format: "fittrack-template", version: 1, template };
+  }
+  function exportTemplates() {
+    downloadFile("fittrack-templates.json", JSON.stringify({ format: "fittrack-training", version: 1, templates: templates.map(({ id: _id, ...item }) => item) }, null, 2));
+  }
+  async function exportQr(value: WorkoutTemplate) {
+    const payload = JSON.stringify(templatePayload(value));
+    if (new TextEncoder().encode(payload).length > 2900) {
+      notify("模板内容超过二维码容量，请导出 JSON 文件", true);
+      return;
+    }
+    qrError = "";
+    qrTemplate = value;
+    qrDialog = true;
+    qrSource = await QRCode.toDataURL(payload, { errorCorrectionLevel: "L", margin: 2, width: 360 });
+  }
+  async function importTemplatePayload(raw: string) {
+    if (new TextEncoder().encode(raw).length > 100000) throw new Error("模板文件过大");
+    const value = JSON.parse(raw);
+    if (value.format === "fittrack-template" && value.version === 1 && value.template) {
+      const { id: _id, ...body } = value.template;
+      templates = [...templates, await api.post<WorkoutTemplate>("/workout-templates", body)];
+      return;
+    }
+    if (value.format === "fittrack-training" && value.version === 1 && Array.isArray(value.templates)) {
+      for (const item of value.templates) {
+        const { id: _id, ...body } = item;
+        templates = [...templates, await api.post<WorkoutTemplate>("/workout-templates", body)];
+      }
+      return;
+    }
+    throw new Error("无法识别此训练模板格式");
+  }
+  async function decodeQr(raw: string) {
+    try {
+      await importTemplatePayload(raw);
+      qrTemplate = null;
+      cameraOpen = false;
+      stopCamera();
+      notify("训练模板已导入");
+    } catch (error) {
+      qrError = error instanceof Error ? error.message : "二维码内容无效";
+    }
+  }
+  function stopCamera() {
+    if (scanFrame) cancelAnimationFrame(scanFrame);
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  async function startCamera() {
+    try {
+      qrError = "";
+      cameraOpen = true;
+      qrDialog = true;
+      await tick();
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      if (qrVideo) {
+        qrVideo.srcObject = cameraStream;
+        await qrVideo.play();
+      }
+      scanCameraFrame();
+    } catch {
+      stopCamera();
+      cameraOpen = false;
+      qrError = "无法使用摄像头，请上传二维码图片导入";
+    }
+  }
+  function scanCameraFrame() {
+    if (!qrVideo || !cameraOpen) return;
+    if (qrVideo.readyState >= 2) {
+      const canvas = document.createElement("canvas");
+      canvas.width = qrVideo.videoWidth;
+      canvas.height = qrVideo.videoHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context?.drawImage(qrVideo, 0, 0);
+      const frame = context?.getImageData(0, 0, canvas.width, canvas.height);
+      const result = frame && jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" });
+      if (result) {
+        cameraOpen = false;
+        stopCamera();
+        void decodeQr(result.data);
+        return;
+      }
+    }
+    scanFrame = requestAnimationFrame(scanCameraFrame);
+  }
+  async function readQrImage(file: File | undefined) {
+    if (!file) return;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context?.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const frame = context?.getImageData(0, 0, canvas.width, canvas.height);
+      const result = frame && jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" });
+      if (!result) throw new Error("图片中没有可识别的二维码");
+      await decodeQr(result.data);
+    } catch (error) {
+      qrError = error instanceof Error ? error.message : "二维码图片读取失败";
+    }
+  }
+  function openImport() {
+    importInput?.click();
+  }
+  function openQrImport() {
+    qrTemplate = null;
+    qrSource = "";
+    qrError = "";
+    qrDialog = true;
+  }
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      notify("训练文件不能超过 20 MB", true);
+      return;
+    }
+    const raw = await file.text();
+    if (file.name.toLowerCase().endsWith(".json")) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.format === "fittrack-training" && Array.isArray(parsed.plans)) {
+          for (const plan of parsed.plans) {
+            const { id: _id, workout_id: _workout, ...body } = plan;
+            await api.post("/plans", { ...body, status: "planned" });
+          }
+          await loadMonth();
+          notify("训练排期已导入");
+        } else {
+          await importTemplatePayload(raw);
+          notify("训练模板已导入");
+        }
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "JSON 导入失败", true);
+      }
+      return;
+    }
+    const parsed = Papa.parse<Record<string, string>>(raw, { header: true, skipEmptyLines: true, dynamicTyping: false });
+    if (parsed.errors.length || !parsed.meta.fields?.length) {
+      notify("CSV 文件无法解析，请检查表头和分隔符", true);
+      return;
+    }
+    if (parsed.data.length > 100000) {
+      notify("CSV 行数不能超过 100000", true);
+      return;
+    }
+    csvHeaders = parsed.meta.fields;
+    csvRows = parsed.data;
+    csvMapping = Object.fromEntries(["date", "title", "exercise", "sets", "reps", "weight_kg", "duration_minutes"].map((key) => [key, csvHeaders.find((header) => header.toLowerCase() === key || header.includes(({ date: "日期", title: "名称", exercise: "动作", sets: "组", reps: "次数", weight_kg: "重量", duration_minutes: "时长" } as Record<string, string>)[key])) || ""]));
+  }
+  async function importCsvPlans(event: SubmitEvent) {
+    event.preventDefault();
+    const grouped = new Map<string, Plan>();
+    let skipped = 0;
+    for (const row of csvRows) {
+      const date = row[csvMapping.date];
+      const title = row[csvMapping.title] || "导入训练计划";
+      const duration = Number(row[csvMapping.duration_minutes]) || 45;
+      const key = `${date}|${title}`;
+      const parsedDate = date ? new Date(`${date}T12:00:00Z`) : null;
+      if (
+        !date ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        !parsedDate ||
+        Number.isNaN(parsedDate.getTime()) ||
+        parsedDate.toISOString().slice(0, 10) !== date ||
+        title.length > 100 ||
+        duration < 1 ||
+        duration > 1440
+      ) {
+        skipped++;
+        continue;
+      }
+      let plan = grouped.get(key);
+      if (!plan) {
+        plan = { date, title, kind: "strength", activity: "strength", duration_minutes: duration, intensity: "moderate", status: "planned", note: "CSV 导入", exercises: [] };
+        grouped.set(key, plan);
+      }
+      const name = row[csvMapping.exercise]?.trim();
+      if (!name || name.length > 100) {
+        skipped++;
+        continue;
+      }
+      let exercise = plan.exercises.find((item) => item.name === name);
+      if (!exercise) {
+        if (plan.exercises.length >= 30) {
+          skipped++;
+          continue;
+        }
+        exercise = { name, sets: [] };
+        plan.exercises.push(exercise);
+      }
+      const countValue = Number(row[csvMapping.sets]) || 1;
+      const repsValue = Number(row[csvMapping.reps]) || 10;
+      const weightValue = Number(row[csvMapping.weight_kg]) || 0;
+      if (!Number.isInteger(countValue) || countValue < 1 || countValue > 50 || !Number.isInteger(repsValue) || repsValue < 1 || repsValue > 1000 || weightValue < 0 || weightValue > 1000 || exercise.sets.length + countValue > 50) {
+        skipped++;
+        continue;
+      }
+      for (let index = 0; index < countValue; index++) exercise.sets.push({ reps: repsValue, weight_kg: weightValue });
+    }
+    if (!grouped.size) {
+      notify("没有找到有效日期的训练行", true);
+      return;
+    }
+    try {
+      for (const plan of grouped.values()) await api.post("/plans", plan);
+      csvRows = [];
+      await loadMonth();
+      notify(`已导入 ${grouped.size} 天训练排期${skipped ? `，跳过 ${skipped} 行` : ""}`);
+    } catch (error) {
+      notify(
+        `${error instanceof Error ? error.message : "CSV 导入失败"}；已保存排期不会回滚`,
+        true,
+      );
+    }
+  }
+  async function exportMonthPlans() {
+    const start = `${month}-01`;
+    const first = new Date(`${start}T12:00:00Z`);
+    first.setUTCMonth(first.getUTCMonth() + 1);
+    first.setUTCDate(0);
+    const plans = await api.get<Plan[]>(`/plans?start=${start}&end=${first.toISOString().slice(0, 10)}`);
+    downloadFile(`fittrack-plans-${month}.json`, JSON.stringify({ format: "fittrack-training", version: 1, plans }, null, 2));
+  }
   function openPlan(existing?: Plan) {
     planDraft = {
       date: app.date,
@@ -132,6 +472,7 @@
       intensity: "moderate",
       status: "planned",
       note: "",
+      exercises: [],
     };
     if (existing)
       planDraft = {
@@ -144,6 +485,7 @@
         intensity: existing.intensity,
         status: existing.status === "completed" ? "planned" : existing.status,
         note: existing.note,
+        exercises: structuredClone(existing.exercises || []),
       };
   }
   async function saveWorkout(event: SubmitEvent) {
@@ -199,6 +541,10 @@
     <p>记录实际运动，也为下一次训练留好时间。</p>
   </div>
   <div class="button-group">
+    <button class="secondary" onclick={openImport}><Upload size={16} />导入计划/模板</button>
+    <button class="secondary" onclick={exportTemplates}><Download size={16} />导出模板 JSON</button>
+    <button class="secondary" onclick={openQrImport}><QrCode size={16} />扫码导入模板</button>
+    <button class="secondary" onclick={() => void exportMonthPlans()}><Download size={16} />导出本月排期</button>
     <button class="secondary" onclick={() => openPlan()}
       ><CalendarDays size={17} />添加排期</button
     ><button class="primary" onclick={() => openWorkout()}
@@ -206,6 +552,22 @@
     >
   </div>
 </div>
+<input bind:this={importInput} class="visually-hidden" type="file" accept=".json,.csv,application/json,text/csv" onchange={(event) => void importFile(event.currentTarget.files?.[0])} />
+<input bind:this={qrFileInput} class="visually-hidden" type="file" accept="image/*" onchange={(event) => void readQrImage(event.currentTarget.files?.[0])} />
+<section class="panel template-library">
+  <div class="section-heading">
+    <div><span class="eyebrow">QUICK START</span><h3>训练模板</h3></div>
+    <button class="secondary small-button" onclick={makeTemplate}><Plus size={15} />新建个人模板</button>
+  </div>
+  <div class="template-grid">
+    {#each allTemplates as template, index}{@const TemplateIcon = templateIcon(template.category)}<article class="template-tile">
+      <span class="metric-icon" class:sage={index % 3 === 0} class:amber={index % 3 === 1} class:blue={index % 3 === 2}><TemplateIcon size={19} /></span>
+      <div><strong>{template.title}</strong><small>{template.exercises.length} 个动作 · {template.duration_minutes} 分钟</small></div>
+      <button class="secondary small-button" onclick={() => openWorkout(undefined, undefined, template)}>套用到今天</button>
+      {#if template.id}<button class="icon-button" title="编辑模板" aria-label="编辑模板" onclick={() => editTemplate(template)}><Pencil size={15} /></button><button class="icon-button" title="导出二维码" aria-label="导出二维码" onclick={() => void exportQr(template)}><QrCode size={15} /></button><button class="icon-button danger" title="删除模板" aria-label="删除模板" onclick={() => void deleteTemplate(template)}><Trash2 size={15} /></button>{:else}<button class="icon-button" title="导出二维码" aria-label="导出二维码" onclick={() => void exportQr(template)}><QrCode size={15} /></button>{/if}
+    </article>{/each}
+  </div>
+</section>
 <div class="metrics-grid three-metrics">
   <div class="metric-card">
     <span class="metric-icon sage"><Timer size={20} /></span>
@@ -262,8 +624,9 @@
           class:outside={!day.startsWith(month)}
           class:selected={day === app.date}
           class:today={day === app.today}
+          class:has-workout={workoutDates.includes(day)}
           onclick={() => void selectDate(day)}
-          ><span>{Number(day.slice(8))}</span>{#each monthPlans
+          ><span>{Number(day.slice(8))}{#if workoutDates.includes(day)}<i class="workout-marker" aria-label="有训练记录"></i>{/if}</span>{#each monthPlans
             .filter((plan) => plan.date === day)
             .slice(0, 2) as plan}<small
               class:complete={plan.status === "completed"}
@@ -272,7 +635,7 @@
         >{/each}
     </div>
     <div class="calendar-legend">
-      <span><i></i>待训练</span><span><i class="done"></i>已完成</span><span
+      <span><i class="recorded"></i>有训练记录</span><span><i></i>待训练</span><span><i class="done"></i>已完成</span><span
         ><i class="skipped"></i>已跳过</span
       >
     </div>
@@ -650,3 +1013,39 @@
       >
     </div></Modal
   >{/if}
+{#if templateDraft}<Modal title={templateDraft.id ? "编辑训练模板" : "新建训练模板"} wide onclose={() => (templateDraft = null)}>
+  <form onsubmit={saveTemplate}>
+    <div class="form-grid">
+      <label>模板名称<input bind:value={templateDraft.title} maxlength="100" required /></label>
+      <label>训练部位<select bind:value={templateDraft.category}><option value="back">背部</option><option value="chest">胸部</option><option value="arms">手臂</option><option value="shoulders">肩部</option><option value="legs">腿部</option><option value="core">核心</option><option value="full_body">全身</option><option value="custom">自定义</option></select></label>
+      <label>默认时长 / 分钟<input type="number" min="1" max="1440" bind:value={templateDraft.duration_minutes} required /></label>
+      <label>默认强度<select bind:value={templateDraft.intensity}><option value="light">轻强度</option><option value="moderate">中等强度</option><option value="vigorous">高强度</option></select></label>
+    </div>
+    <div class="section-heading"><h3>动作与默认组数</h3><button type="button" class="text-button" onclick={() => templateDraft?.exercises.push({ name: "", sets: [{ reps: 10, weight_kg: 0 }] })}><Plus size={15} />添加动作</button></div>
+    {#each templateDraft.exercises as exercise, index}<div class="template-exercise-row">
+      <input aria-label="动作名称" bind:value={exercise.name} maxlength="100" placeholder="动作名称" required />
+      <label>组数<input type="number" min="1" max="50" value={exercise.sets.length} onchange={(event) => { const count = Math.max(1, Number(event.currentTarget.value) || 1); exercise.sets = Array.from({ length: count }, (_, i) => exercise.sets[i] || { reps: 10, weight_kg: 0 }); }} /></label>
+      <label>次数<input type="number" min="1" max="1000" bind:value={exercise.sets[0].reps} /></label>
+      <label>重量 / kg<input type="number" min="0" max="1000" step="0.5" bind:value={exercise.sets[0].weight_kg} /></label>
+      <button class="icon-button danger" type="button" aria-label="移除动作" disabled={templateDraft.exercises.length <= 1} onclick={() => templateDraft?.exercises.splice(index, 1)}><Trash2 size={15} /></button>
+    </div>{/each}
+    <label>备注<textarea bind:value={templateDraft.note} maxlength="2000" rows="2"></textarea></label>
+    <div class="form-actions"><button class="primary"><Check size={16} />保存模板</button></div>
+  </form>
+</Modal>{/if}
+{#if csvRows.length}<Modal title="映射 CSV 列到训练排期" wide onclose={() => (csvRows = [])}>
+  <p class="small muted">每一行对应一个动作；相同日期和训练名称会合并为同一条排期。</p>
+  <form onsubmit={importCsvPlans}>
+    <div class="form-grid csv-map-grid">
+      {#each [["date", "训练日期"], ["title", "训练名称"], ["exercise", "动作名称"], ["sets", "组数"], ["reps", "次数"], ["weight_kg", "重量 kg"], ["duration_minutes", "时长分钟"]] as [key, label]}<label>{label}<select bind:value={csvMapping[key]}><option value="">未映射</option>{#each csvHeaders as header}<option value={header}>{header}</option>{/each}</select></label>{/each}
+    </div>
+    <p class="small muted">预览 {Math.min(csvRows.length, 5)} / {csvRows.length} 行</p>
+    <div class="form-actions"><button type="button" class="secondary" onclick={() => (csvRows = [])}>取消</button><button class="primary" disabled={!csvMapping.date || !csvMapping.exercise}>导入排期</button></div>
+  </form>
+</Modal>{/if}
+{#if qrDialog}<Modal title={qrTemplate ? `分享模板：${qrTemplate.title}` : "导入训练模板二维码"} onclose={() => { qrDialog = false; cameraOpen = false; stopCamera(); }}>
+  {#if qrTemplate && qrSource}<div class="qr-export"><img src={qrSource} alt="训练模板二维码" /><button class="secondary" onclick={() => downloadDataUrl(`${qrTemplate?.title || "训练模板"}.png`, qrSource)}><Download size={16} />下载二维码</button></div>{/if}
+  {#if cameraOpen}<video bind:this={qrVideo} class="qr-video" playsinline></video>{/if}
+  {#if qrError}<p class="error-text">{qrError}</p>{/if}
+  <div class="form-actions"><button class="secondary" onclick={() => void startCamera()}><Camera size={16} />打开摄像头</button><button class="secondary" onclick={() => qrFileInput?.click()}><Upload size={16} />上传二维码图片</button>{#if qrTemplate}<button class="secondary" onclick={() => qrTemplate && downloadFile("fittrack-template.json", JSON.stringify(templatePayload(qrTemplate), null, 2))}><Download size={16} />导出 JSON</button>{/if}</div>
+</Modal>{/if}

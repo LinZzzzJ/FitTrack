@@ -259,6 +259,7 @@ def test_backup_migration_restore_preserves_originals(managed):
             "jobs",
             "feedback",
             "days",
+            "workout_templates",
         }
     operation = wait_operation(
         client, client.post("/api/storage/migrate", json={"path": "personal/my-health"})

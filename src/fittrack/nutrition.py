@@ -52,5 +52,10 @@ def label_food(values):
             "protein_g": round(label.protein_g * factor, 2),
             "carbs_g": round(label.carbs_g * factor, 2),
             "fat_g": round(label.fat_g * factor, 2),
+            "fiber_g": round(label.fiber_g * factor, 2) if label.fiber_g is not None else None,
+            "sugar_g": round(label.sugar_g * factor, 2) if label.sugar_g is not None else None,
+            "sodium_mg": round(label.sodium_mg * factor, 2)
+            if label.sodium_mg is not None
+            else None,
         }
     ).model_dump()

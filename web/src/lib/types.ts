@@ -5,14 +5,24 @@ export interface User {
   username: string;
   is_admin: boolean;
 }
+export type ActivityLevel =
+  | "sedentary"
+  | "light"
+  | "moderate"
+  | "high"
+  | "very_active";
 export interface Profile {
   effective_date: string;
   height_cm: number;
   initial_weight_kg: number;
   body_fat_pct: number | null;
   sex: "male" | "female" | "other";
-  resting_kcal: number;
+  age: number | null;
+  resting_kcal: number | null;
+  estimated_resting_kcal: number | null;
+  estimated_maintenance_kcal: number | null;
   activity_factor: number;
+  activity_level: ActivityLevel | null;
   target_weight_kg: number | null;
   calorie_target: number | null;
   protein_target_g: number | null;
@@ -34,12 +44,18 @@ export interface Food {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number | null;
+  sugar_g?: number | null;
+  sodium_mg?: number | null;
 }
 export interface Nutrients {
   kcal: number;
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g: number | null;
+  sugar_g: number | null;
+  sodium_mg: number | null;
   macro_percent: { protein: number; carbs: number; fat: number };
   food_percent: number[];
 }
@@ -65,6 +81,9 @@ export interface LabelReadout {
   protein_g: number | null;
   carbs_g: number | null;
   fat_g: number | null;
+  fiber_g: number | null;
+  sugar_g: number | null;
+  sodium_mg: number | null;
   assumptions: string[];
 }
 export interface NutritionLabel {
@@ -124,7 +143,19 @@ export interface Plan {
   intensity: "light" | "moderate" | "vigorous";
   status: "planned" | "completed" | "skipped";
   note: string;
+  exercises: Exercise[];
   workout_id?: string | null;
+}
+export interface WorkoutTemplate {
+  id?: string;
+  title: string;
+  category: "back" | "chest" | "arms" | "shoulders" | "legs" | "core" | "full_body" | "custom";
+  icon: string;
+  kind: "strength";
+  duration_minutes: number;
+  intensity: Workout["intensity"];
+  exercises: Exercise[];
+  note: string;
 }
 export interface Feedback {
   summary: string;
@@ -143,6 +174,7 @@ export interface JobRequest {
   cardio_input?: CardioInput;
   week_start?: string;
   meal_mode?: "photo" | "label";
+  meal_description?: string | null;
 }
 export interface CardioInput {
   kind: "cardio";
@@ -334,5 +366,6 @@ export interface Me {
   profile: Profile | null;
   ai: AIConfig;
   activities: Activity[];
+  activity_levels: Record<ActivityLevel, { label: string; factor: number }>;
   runtime?: RuntimeCapabilities | null;
 }

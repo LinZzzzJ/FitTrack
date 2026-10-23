@@ -7,13 +7,18 @@ from pathlib import Path
 from fittrack.distribution import FROZEN
 
 APP_VERSION = "0.4.0"
-API_REVISION = 2
+API_REVISION = 3
 CAPABILITIES = [
     "cardio_estimate",
     "weekly_review",
     "diet_history",
     "nutrition_label",
     "meal_job_delete",
+    "text_meal_estimate",
+    "expanded_nutrition",
+    "workout_templates",
+    "training_import",
+    "activity_estimates",
 ]
 
 

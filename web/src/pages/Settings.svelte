@@ -15,10 +15,16 @@
   import DataManagement from "../components/DataManagement.svelte";
   type ProfileForm = Omit<
     Profile,
-    "height_cm" | "initial_weight_kg" | "resting_kcal"
+    | "height_cm"
+    | "initial_weight_kg"
+    | "resting_kcal"
+    | "age"
+    | "estimated_resting_kcal"
+    | "estimated_maintenance_kcal"
   > & {
     height_cm: number | null;
     initial_weight_kg: number | null;
+    age: number | null;
     resting_kcal: number | null;
   };
   const defaults: ProfileForm = {
@@ -27,8 +33,10 @@
     initial_weight_kg: null,
     body_fat_pct: null,
     sex: "male",
+    age: null,
     resting_kcal: null,
     activity_factor: 1.2,
+    activity_level: "sedentary",
     target_weight_kg: null,
     calorie_target: null,
     protein_target_g: null,
@@ -36,6 +44,14 @@
     fat_target_g: null,
   };
   let profile = $state<ProfileForm>({ ...defaults });
+  function profilePayload() {
+    const raw = $state.snapshot(profile) as Profile;
+    const { estimated_resting_kcal: _resting, estimated_maintenance_kcal: _daily, ...payload } =
+      raw;
+    return Object.fromEntries(
+      Object.entries(payload).map(([key, value]) => [key, value === undefined ? null : value]),
+    );
+  }
   let profileForm: HTMLFormElement;
   let goalJob = $state<Job | null>(null);
   let submittingGoal = $state(false);
@@ -63,11 +79,36 @@
       value?.initial_weight_kg,
       value?.body_fat_pct ?? null,
       value?.sex,
+      value?.age,
       value?.resting_kcal,
       value?.activity_factor,
+      value?.activity_level,
       value?.target_weight_kg,
     ]);
   }
+  const activityLevels = [
+    ["sedentary", "久坐", 1.2],
+    ["light", "轻度活动", 1.375],
+    ["moderate", "中度活动", 1.55],
+    ["high", "高度活动", 1.725],
+    ["very_active", "非常活跃", 1.9],
+  ] as const;
+  let estimatedResting = $derived.by(() => {
+    if (!profile.initial_weight_kg || !profile.height_cm || !profile.age) return null;
+    const offset = profile.sex === "male" ? 5 : profile.sex === "female" ? -161 : -78;
+    return Math.round(
+      10 * profile.initial_weight_kg + 6.25 * profile.height_cm - 5 * profile.age + offset,
+    );
+  });
+  let effectiveActivityLevel = $derived(
+    profile.activity_level ||
+      activityLevels.reduce((best, current) =>
+        Math.abs(current[2] - profile.activity_factor) <
+        Math.abs(best[2] - profile.activity_factor)
+          ? current
+          : best,
+      )[0],
+  );
   let goalStale = $derived(
     !!goal &&
       (goalJob?.result?.stale ||
@@ -151,12 +192,7 @@
       const job = await api.post<Job>("/jobs", {
         kind: "goals",
         date: app.today,
-        goal_profile: Object.fromEntries(
-          Object.entries($state.snapshot(profile)).map(([key, value]) => [
-            key,
-            value === undefined ? null : value,
-          ]),
-        ),
+        goal_profile: profilePayload(),
         request_key: crypto.randomUUID(),
       });
       followGoal(job);
@@ -221,12 +257,7 @@
   async function saveProfile(event: SubmitEvent) {
     event.preventDefault();
     await perform(async () => {
-      const cleaned = Object.fromEntries(
-        Object.entries(profile).map(([key, value]) => [
-          key,
-          value === undefined ? null : value,
-        ]),
-      );
+      const cleaned = profilePayload();
       app.profile = await api.put<Profile>("/profile", cleaned);
     }, "资料与目标已保存");
   }
@@ -271,7 +302,7 @@
   <div>
     <span class="eyebrow">BUILT AROUND YOU</span>
     <h2>{app.profile ? "让计划，适合你。" : "先认识一下现在的你。"}</h2>
-    <p>静息能量使用你的设备平均值。目标可以稍后填写。</p>
+    <p>可填写设备静息能量，或用身体资料生成估算。</p>
   </div>
 </div>
 <form onsubmit={saveProfile} bind:this={profileForm}>
@@ -317,29 +348,44 @@
             ><option value="other">其他 / 不透露</option></select
           ></label
         ><label
-          >平均静息能量 <span>kcal / 天</span><input
+          >年龄 <span>岁</span><input
+            aria-label="年龄"
+            type="number"
+            min="13"
+            max="110"
+            step="1"
+            bind:value={profile.age}
+            required={profile.resting_kcal == null}
+          /></label
+        ><label
+          >设备静息能量 <span>kcal / 天，可留空估算</span><input
             aria-label="平均静息能量"
             type="number"
             min="500"
             max="5000"
             bind:value={profile.resting_kcal}
-            required
           /></label
         ><label
-          >非训练活动系数<input
-            aria-label="活动系数"
-            type="number"
-            min="1"
-            max="2.5"
-            step="0.05"
-            bind:value={profile.activity_factor}
-            required
-          /></label
+          >每日活动状态<select
+            aria-label="每日活动状态"
+            value={effectiveActivityLevel}
+            onchange={(event) => {
+              const level = activityLevels.find((item) => item[0] === event.currentTarget.value);
+              if (level) {
+                profile.activity_level = level[0];
+                profile.activity_factor = level[2];
+              }
+            }}
+            >{#each activityLevels as [value, label, factor]}<option {value}
+                >{label} · ×{factor}</option
+              >{/each}</select
+          ></label
         >
       </div>
       <div class="info-note">
-        活动系数默认
-        1.2，以久坐日常为估计基础。运动额外按净消耗计算；你可以根据实际情况调整系数。
+        {#if estimatedResting != null}按 Mifflin–St Jeor 公式估算静息能量约
+          {number(profile.resting_kcal ?? estimatedResting)} kcal / 天。{/if}
+        活动状态用于估算日常总消耗，训练消耗仍单独计算。估算仅供参考，可填写设备值覆盖。
       </div>
       <label
         >资料生效日期<input

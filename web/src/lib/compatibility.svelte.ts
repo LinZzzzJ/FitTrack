@@ -1,4 +1,4 @@
-export const API_REVISION = 2;
+export const API_REVISION = 3;
 export interface VersionInfo {
   version: string;
   api_revision: number;
@@ -25,7 +25,17 @@ export function checkVersion() {
       compatibility.message =
         info.api_revision !== API_REVISION ||
         info.restart_required ||
-        !["diet_history", "nutrition_label", "cardio_estimate", "meal_job_delete"].every((value) =>
+        ![
+          "diet_history",
+          "nutrition_label",
+          "cardio_estimate",
+          "meal_job_delete",
+          "text_meal_estimate",
+          "expanded_nutrition",
+          "workout_templates",
+          "training_import",
+          "activity_estimates",
+        ].every((value) =>
           info.capabilities?.includes(value),
         )
           ? "网页与后台版本不一致或后台等待更新。请使用「重启 FitTrack」入口，再刷新网页；未提交的表单会保留在当前页面。"

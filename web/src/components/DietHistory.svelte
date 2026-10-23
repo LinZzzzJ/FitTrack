@@ -205,7 +205,7 @@
           暂无已确认饮食，可补录本日记录。
         </p>{/if}
       {#if day.jobs.length}<div class="job-list">
-          <span class="small muted">照片分析记录</span>
+          <span class="small muted">餐食 AI 分析记录</span>
           {#each day.jobs as job}{@const booked = day.meals.some(
               (meal) => meal.source_job_id === job.id,
             )}
@@ -225,7 +225,11 @@
                   >{slots[job.request.slot || "lunch"]} · {job.request
                     .meal_mode === "label"
                     ? "标签"
-                    : "照片"} · {job.status === "done"
+                    : job.request.meal_description
+                      ? job.request.image_id
+                        ? "文字+照片"
+                        : "文字描述"
+                      : "照片"} · {job.status === "done"
                     ? booked
                       ? "已入账"
                       : "待确认"
@@ -238,7 +242,7 @@
                           : "分析未完成"}</strong
                 >
                 <p class:job-error={!!job.error}>
-                  {job.error || job.request.note || "按照片中可食部分估算"}
+                  {job.error || job.request.note || job.request.meal_description || "按照片中可食部分估算"}
                 </p>
               </div>
               {#if job.status === "done"}{#if day.meals.some((meal) => meal.source_job_id === job.id)}<span
@@ -251,7 +255,7 @@
                   disabled={app.busy}
                   onclick={() => onretry(job)}
                   ><RotateCcw size={15} />重试</button
-                >{#if job.request.meal_mode !== "label"}<button
+                >{#if job.request.meal_mode !== "label" && job.request.image_id}<button
                     class="text-button"
                     disabled={app.busy}
                     onclick={() => onlabel(job)}>按营养标签重试</button
@@ -264,10 +268,10 @@
               <button
                 type="button"
                 class="icon-button danger"
-                aria-label="删除照片分析记录"
+                aria-label="删除餐食分析记录"
                 title={["queued", "running"].includes(job.status)
-                  ? "请等待照片分析结束后再删除记录"
-                  : "删除照片分析记录"}
+                  ? "请等待餐食分析结束后再删除记录"
+                  : "删除餐食分析记录"}
                 disabled={app.busy || ["queued", "running"].includes(job.status)}
                 onclick={() => ondeletejob(job)}><Trash2 size={16} /></button
               >

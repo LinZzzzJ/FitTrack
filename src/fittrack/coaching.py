@@ -43,7 +43,9 @@ def cardio_context(store, uid, day, values):
         "reference_met": activity["mets"][data["intensity"]],
         "reference_source": activity["source"],
         "weight_kg": store.effective_weight(uid, day, profile["initial_weight_kg"]),
-        "resting_kcal": (body or {}).get("resting_kcal") or profile["resting_kcal"],
+        "resting_kcal": (body or {}).get("resting_kcal")
+        or profile.get("resting_kcal")
+        or profile.get("estimated_resting_kcal"),
     }
 
 

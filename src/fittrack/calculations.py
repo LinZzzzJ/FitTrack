@@ -91,11 +91,43 @@ def dates_between(start: str, end: str) -> list[str]:
     return [(first + timedelta(days=i)).isoformat() for i in range(length + 1)]
 
 
+ACTIVITY_LEVELS = {
+    "sedentary": {"label": "久坐", "factor": 1.2},
+    "light": {"label": "轻度活动", "factor": 1.375},
+    "moderate": {"label": "中度活动", "factor": 1.55},
+    "high": {"label": "高度活动", "factor": 1.725},
+    "very_active": {"label": "非常活跃", "factor": 1.9},
+}
+
+
+def resting_estimate(profile: dict, weight: float | None = None) -> float | None:
+    if not profile.get("age") or not profile.get("height_cm"):
+        return None
+    kilograms = weight or profile.get("initial_weight_kg")
+    if not kilograms:
+        return None
+    base = 10 * kilograms + 6.25 * profile["height_cm"] - 5 * profile["age"]
+    sex_adjustment = {"male": 5, "female": -161, "other": (5 - 161) / 2}[
+        profile.get("sex", "male")
+    ]
+    return round(base + sex_adjustment)
+
+
+def activity_factor(profile: dict) -> float:
+    level = profile.get("activity_level")
+    if level in ACTIVITY_LEVELS:
+        return ACTIVITY_LEVELS[level]["factor"]
+    return profile.get("activity_factor", 1.2)
+
+
 def nutrients(items: list[dict]) -> dict:
     result = {
         key: round(sum(item[key] for item in items), 2)
         for key in ("kcal", "protein_g", "carbs_g", "fat_g")
     }
+    for key in ("fiber_g", "sugar_g", "sodium_mg"):
+        values = [item.get(key) for item in items]
+        result[key] = round(sum(values), 2) if values and all(v is not None for v in values) else None
     energy = {
         "protein": result["protein_g"] * 4,
         "carbs": result["carbs_g"] * 4,

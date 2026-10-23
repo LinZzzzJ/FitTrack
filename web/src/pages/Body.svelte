@@ -160,7 +160,7 @@
         </div>
         <div>
           <span>平均静息能量</span><strong
-            >{number(app.day.profile.resting_kcal)}<small> kcal</small></strong
+            >{number(app.day.profile.resting_kcal ?? app.day.profile.estimated_resting_kcal)}<small> kcal{app.day.profile.resting_kcal == null ? " 估算" : ""}</small></strong
           >
         </div>
         <div>
@@ -171,7 +171,7 @@
           >
         </div>
       </div>{:else}<p class="muted">
-        先填写身高、初始体重和设备静息能量。
+        先填写身高、初始体重，以及年龄或设备静息能量。
       </p>{/if}<button class="text-button" onclick={() => navigate("settings")}
       >管理个人资料与目标<ArrowRight size={16} /></button
     >

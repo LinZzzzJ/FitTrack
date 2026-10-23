@@ -1861,6 +1861,124 @@ tr:last-child td {
 .three-metrics {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.meal-ai-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin: 16px 0;
+}
+.nutrient-summary {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.nutrient-summary strong {
+  color: var(--ink);
+  margin-left: 5px;
+}
+.dashboard-nutrients {
+  margin-top: 14px;
+}
+.template-library {
+  margin-bottom: 22px;
+}
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+}
+.template-tile {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.template-tile > div {
+  min-width: 0;
+  flex: 1;
+}
+.template-tile strong,
+.template-tile small {
+  display: block;
+}
+.template-tile strong {
+  font-size: 12px;
+}
+.template-tile small {
+  color: var(--muted);
+  margin-top: 3px;
+  font-size: 10px;
+}
+.template-exercise-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(85px, 0.3fr)) 32px;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.template-exercise-row label {
+  font-size: 10px;
+  margin: 0;
+}
+.csv-map-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.qr-export {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.qr-export img {
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+}
+.qr-video {
+  width: 100%;
+  max-height: 48vh;
+  background: #141916;
+  object-fit: contain;
+}
+.workout-marker {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #287857;
+}
+.calendar-day.has-workout > span {
+  color: #1f6248;
+}
+.calendar-day {
+  position: relative;
+}
+.calendar-legend i.recorded {
+  background: #287857;
+}
+@media (max-width: 680px) {
+  .template-grid,
+  .csv-map-grid {
+    grid-template-columns: 1fr;
+  }
+  .meal-ai-entry {
+    grid-template-columns: 1fr;
+  }
+  .template-exercise-row {
+    grid-template-columns: minmax(0, 1fr) 32px;
+  }
+  .template-exercise-row label {
+    grid-row: 2;
+  }
+}
 .training-grid {
   grid-template-columns: 1.2fr 1fr;
 }

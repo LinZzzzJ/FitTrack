@@ -15,7 +15,16 @@ CREATE TABLE IF NOT EXISTS workspaces(user_id TEXT PRIMARY KEY REFERENCES users(
 CREATE TABLE IF NOT EXISTS ai(user_id TEXT PRIMARY KEY REFERENCES users(id),data TEXT NOT NULL,ciphertext TEXT);
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 """
-HEALTH_TABLES = ("profiles", "bodies", "images", "entries", "jobs", "feedback", "days")
+HEALTH_TABLES = (
+    "profiles",
+    "bodies",
+    "images",
+    "entries",
+    "jobs",
+    "feedback",
+    "days",
+    "workout_templates",
+)
 
 
 class ControlStore(Store):

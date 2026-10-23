@@ -20,9 +20,13 @@ class JobRunner:
             if prior:
                 return self.store.job(uid, prior[0]["id"])
             if request["kind"] == "meal":
-                if not request.get("image_id"):
-                    raise ValueError("请先上传餐食照片")
-                path = self.store.image_path(uid, request["image_id"])
+                if not request.get("image_id") and not request.get("meal_description"):
+                    raise ValueError("请提供餐食照片或文字描述")
+                path = (
+                    self.store.image_path(uid, request["image_id"])
+                    if request.get("image_id")
+                    else None
+                )
                 context = None
             elif request["kind"] == "goals":
                 if not request.get("goal_profile"):
@@ -72,7 +76,15 @@ class JobRunner:
                     label, usage = self.ai.meal_label(config, path, job["request"]["note"])
                     result = {"label": LabelReadout.model_validate(label).model_dump()}
                 else:
-                    result, usage = self.ai.meal(config, path, job["request"]["note"])
+                    if job["request"].get("meal_description"):
+                        result, usage = self.ai.meal_description(
+                            config,
+                            job["request"]["meal_description"],
+                            job["request"]["note"],
+                            path,
+                        )
+                    else:
+                        result, usage = self.ai.meal(config, path, job["request"]["note"])
                     result["totals"] = nutrients(result["items"])
             elif job["kind"] == "goals":
                 goals, usage = self.ai.goals(config, context)

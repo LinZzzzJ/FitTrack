@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, 
 from fastapi.responses import FileResponse, StreamingResponse
 from pwdlib import PasswordHash
 
-from fittrack.calculations import ACTIVITIES, dates_between, today, workout_energy
+from fittrack.calculations import ACTIVITIES, ACTIVITY_LEVELS, dates_between, today, workout_energy
 from fittrack.models import (
     AISettings,
     BodyRecord,
@@ -18,6 +18,7 @@ from fittrack.models import (
     Profile,
     TrainingPlan,
     Workout,
+    WorkoutTemplate,
 )
 from fittrack.store import ActiveJobError
 
@@ -106,6 +107,7 @@ def router():
             if hasattr(request.app.state, "runtime")
             else None,
             "activities": ACTIVITIES,
+            "activity_levels": ACTIVITY_LEVELS,
         }
 
     @api.put("/settings")
@@ -195,6 +197,38 @@ def router():
     entry_routes("workout", "/workouts", Workout)
     entry_routes("plan", "/plans", TrainingPlan)
 
+    @api.get("/workout-days")
+    def workout_days(request: Request, start: date, end: date, user=Depends(current_user)):
+        dates_between(start.isoformat(), end.isoformat())
+        return request.app.state.store.workout_dates(
+            user["id"], start.isoformat(), end.isoformat()
+        )
+
+    @api.get("/workout-templates")
+    def workout_templates(request: Request, user=Depends(current_user)):
+        return request.app.state.store.templates(user["id"])
+
+    @api.post("/workout-templates", status_code=201)
+    def create_workout_template(
+        body: WorkoutTemplate, request: Request, user=Depends(current_user)
+    ):
+        return request.app.state.store.save_template(
+            user["id"], body.model_dump(mode="json")
+        )
+
+    @api.put("/workout-templates/{tid}")
+    def update_workout_template(
+        tid: str, body: WorkoutTemplate, request: Request, user=Depends(current_user)
+    ):
+        return request.app.state.store.save_template(
+            user["id"], body.model_dump(mode="json"), tid
+        )
+
+    @api.delete("/workout-templates/{tid}", status_code=204)
+    def delete_workout_template(tid: str, request: Request, user=Depends(current_user)):
+        request.app.state.store.delete_template(user["id"], tid)
+        return Response(status_code=204)
+
     @api.get("/diet-history")
     def diet_history(request: Request, start: date, end: date, user=Depends(current_user)):
         return request.app.state.store.diet_history(user["id"], start.isoformat(), end.isoformat())
@@ -226,6 +260,7 @@ def router():
                     "duration_minutes",
                     "intensity",
                     "note",
+                    "exercises",
                 )
             }
             | {"plan_id": pid}

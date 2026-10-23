@@ -1,6 +1,6 @@
 # 需求、实现与验收映射
 
-对应公开 v0.4.0；整理日期：2026-10-20。来源为当前可访问对话中的用户要求、已批准实施计划、源码和验收记录；没有将 AI 自行建议视作已确认需求。功能“已实现”不表示所有平台均通过验收。
+公开基线为 v0.4.0；整理日期：2026-10-23。R20–R26 来自 2026-10-22 用户提出的新需求及后续确认方案。功能“已实现”不表示所有平台均通过验收。
 
 ## 已确认且当前已实现
 
@@ -25,14 +25,23 @@
 | R17 | 删除计划：只删除已结束的餐食照片/标签分析 | `Store.delete_job`、DELETE jobs、DietHistory | 确认不可页面撤销；运行任务拒绝；餐食/原图/备份保留 |
 | R18 | 发布计划：完整、小体积 Windows 便携版与非 MD 指南 | `tools`、`release-docs`、构建检查脚本 | 无需 Python/Node，Windows 11 x64；约 20.81 MiB ZIP；Win10 未实测 |
 | R19 | 公开计划：Public 源码、精致中文 README、Release | README、公开 `main`、v0.4.0 Release | 干净公开历史、模拟截图、无个人数据；没有部署公网服务 |
+| R20 | 静息消耗未知时提供估算和活动等级 | `resting_estimate`、`activity_factor`、Settings/Body | Mifflin–St Jeor、年龄/性别/身高/体重；保留手动值和记录日覆盖，估算不伪装实测 |
+| R21 | 手动录餐时由 AI 生成热量和营养草稿 | `JobRequest.meal_description`、`AIClient.meal_description`、Meals | 文本/可选照片任务，缺失微量值为空，失败保留手动数据，确认前不入账 |
+| R22 | 导入健身软件导出的计划 | 训练 CSV 列映射与 FitTrack JSON 导入 | CSV 日期/名称/动作/组数/次数/重量映射；JSON 版本校验；导入排期不自动成为实际训练 |
+| R23 | 训练日历区分有无实际训练记录 | `/workout-days`、Training 日历 | 只标注实际训练日期；待训练/完成/跳过排期状态保持独立 |
+| R24 | 部位模板降低每日训练录入成本 | 预置部位模板、个人 `workout_templates`、当天套用 | 套用后复制为当天训练；当天编辑不改原模板；账号隔离和备份恢复 |
+| R25 | 营养分布增加膳食纤维、总糖和钠 | `FoodItem`、标签、`nutrients`、Dashboard/Meals | 缺失值保留空；已知值缩放、汇总和人工修正可用；旧记录继续读取 |
+| R26 | 训练模板支持二维码和文件交换 | 本地 QR 编解码、模板 JSON、训练排期 JSON/CSV | 二维码只含单模板离线载荷；文件版本/容量/无效行校验；不含账号或服务端链接 |
 
-测试映射：计算/历史见 `test_core.py`；AI 异常/恢复见 `test_ai_and_recovery.py`；目标见 `test_goal_suggestions.py`；有氧/周复盘见 `test_coaching.py`；目录/凭据见 `test_managed_runtime.py`；标签/版本见 `test_diet_labels_version.py`；原图见 `test_meal_images.py`；删除见 `test_delete_meal_jobs.py`；便携边界见 `test_portable.py`。验证范围见 [ACCEPTANCE](ACCEPTANCE.md)。
+测试映射：计算/历史见 `test_core.py`；AI 异常/恢复见 `test_ai_and_recovery.py`；目标见 `test_goal_suggestions.py`；有氧/周复盘见 `test_coaching.py`；目录/凭据见 `test_managed_runtime.py`；标签/版本见 `test_diet_labels_version.py`；原图见 `test_meal_images.py`；删除见 `test_delete_meal_jobs.py`；新估算/营养/文字 AI/模板见 `test_new_features.py`；便携边界见 `test_portable.py`。验证范围见 [ACCEPTANCE](ACCEPTANCE.md)。
 
 ## 关键不变量
 
 - 初始静息 1800、活动系数 1.2、75kg、6 MET、60 分钟、摄入 2000 → 净运动 375、日消耗 2535、缺口 **535 kcal**。
 - 上传照片、AI 分析成功、采用建议和正式保存是不同动作；仅确认餐食和实际训练影响收支。
 - 新增夜宵与已有晚饭累加；编辑原餐食才更新该条。重新选择照片本身不应自动覆盖已入账记录。
+- 静息估算来自公式，不是设备实测；饮食 AI 只生成需核对的草稿，未知营养不补零。
+- 模板二维码离线交换不依赖服务端；第三方导入承诺通用 CSV/JSON，不代表兼容指定软件专有格式。
 - 饮食长期保存，七天只是查询与展示窗口；图表固定起点不删除更早记录。
 - 应用运行文件受根目录约束；安装依赖、构建产物、绑定快捷方式、浏览器/OS 自身文件分别说明边界。
 - 不自动结束用户浏览器、不设置开机启动、不自动调用/重试付费 AI、不静默恢复共享 Key。

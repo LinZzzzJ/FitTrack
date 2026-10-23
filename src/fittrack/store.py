@@ -11,7 +11,13 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from fittrack.calculations import dates_between, nutrients, workout_energy
+from fittrack.calculations import (
+    activity_factor,
+    dates_between,
+    nutrients,
+    resting_estimate,
+    workout_energy,
+)
 from fittrack.config import atomic_bytes
 
 SCHEMA = """
@@ -24,6 +30,7 @@ CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, user_id TEXT NOT NULL RE
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), kind TEXT NOT NULL, date TEXT NOT NULL, request_key TEXT NOT NULL, request TEXT NOT NULL, status TEXT NOT NULL, result TEXT, error TEXT, source_hash TEXT, created_at REAL NOT NULL, finished_at REAL, UNIQUE(user_id,request_key));
 CREATE TABLE IF NOT EXISTS feedback(user_id TEXT NOT NULL REFERENCES users(id), date TEXT NOT NULL, data TEXT NOT NULL, source_hash TEXT NOT NULL, created_at REAL NOT NULL, PRIMARY KEY(user_id,date));
 CREATE TABLE IF NOT EXISTS days(user_id TEXT NOT NULL REFERENCES users(id), date TEXT NOT NULL, completed INTEGER NOT NULL, PRIMARY KEY(user_id,date));
+CREATE TABLE IF NOT EXISTS workout_templates(user_id TEXT NOT NULL REFERENCES users(id), id TEXT NOT NULL, data TEXT NOT NULL, created_at REAL NOT NULL, PRIMARY KEY(user_id,id));
 CREATE INDEX IF NOT EXISTS entry_lookup ON entries(user_id,kind,date);
 CREATE INDEX IF NOT EXISTS jobs_lookup ON jobs(user_id,date,created_at);
 CREATE INDEX IF NOT EXISTS image_lookup ON images(user_id,sha);
@@ -147,7 +154,7 @@ class Store:
                 "INSERT INTO profiles VALUES(?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET data=excluded.data",
                 (uid, data["effective_date"], encode(data)),
             )
-        return data
+        return self.profile(uid, data["effective_date"])
 
     def profile(self, uid, day):
         rows = self.rows(
@@ -158,7 +165,57 @@ class Store:
             rows = self.rows(
                 "SELECT data FROM profiles WHERE user_id=? ORDER BY date LIMIT 1", (uid,)
             )
-        return json.loads(rows[0]["data"]) if rows else None
+        if not rows:
+            return None
+        value = json.loads(rows[0]["data"])
+        value.setdefault("age", None)
+        value.setdefault("activity_level", None)
+        value.setdefault("estimated_resting_kcal", None)
+        value.setdefault("estimated_maintenance_kcal", None)
+        weight = self.effective_weight(uid, day, value.get("initial_weight_kg"))
+        estimate = resting_estimate(value, weight)
+        value["estimated_resting_kcal"] = estimate
+        if value.get("resting_kcal") is None:
+            value["estimated_maintenance_kcal"] = (
+                round(estimate * activity_factor(value), 1) if estimate is not None else None
+            )
+        else:
+            value["estimated_maintenance_kcal"] = round(
+                value["resting_kcal"] * activity_factor(value), 1
+            )
+        return value
+
+    def templates(self, uid):
+        return [
+            json.loads(row["data"])
+            | {"id": row["id"]}
+            for row in self.rows(
+                "SELECT id,data FROM workout_templates WHERE user_id=? ORDER BY created_at,id",
+                (uid,),
+            )
+        ]
+
+    def save_template(self, uid, data, ident=None):
+        with self.lock:
+            if ident is not None and not self.rows(
+                "SELECT id FROM workout_templates WHERE user_id=? AND id=?", (uid, ident)
+            ):
+                raise KeyError("训练模板不存在")
+            ident = ident or identifier()
+            self.db.execute(
+                "INSERT INTO workout_templates VALUES(?,?,?,?) "
+                "ON CONFLICT(user_id,id) DO UPDATE SET data=excluded.data",
+                (uid, ident, encode(data), time.time()),
+            )
+        return data | {"id": ident}
+
+    def delete_template(self, uid, ident):
+        with self.lock:
+            cursor = self.db.execute(
+                "DELETE FROM workout_templates WHERE user_id=? AND id=?", (uid, ident)
+            )
+            if not cursor.rowcount:
+                raise KeyError("训练模板不存在")
 
     def save_body(self, uid, data):
         if all(data.get(key) is None for key in ("weight_kg", "body_fat_pct", "resting_kcal")):
@@ -251,6 +308,16 @@ class Store:
             for row in self.rows(
                 "SELECT * FROM entries WHERE user_id=? AND kind=? AND date BETWEEN ? AND ? ORDER BY date,created_at",
                 (uid, kind, start, end),
+            )
+        ]
+
+    def workout_dates(self, uid, start, end):
+        return [
+            row["date"]
+            for row in self.rows(
+                "SELECT DISTINCT date FROM entries WHERE user_id=? AND kind='workout' "
+                "AND date BETWEEN ? AND ? ORDER BY date",
+                (uid, start, end),
             )
         ]
 
@@ -356,7 +423,11 @@ class Store:
             weight = (
                 self.effective_weight(uid, day, profile["initial_weight_kg"]) if profile else None
             )
-            resting = (body or {}).get("resting_kcal") or (profile or {}).get("resting_kcal")
+            resting = (
+                (body or {}).get("resting_kcal")
+                or (profile or {}).get("resting_kcal")
+                or (profile or {}).get("estimated_resting_kcal")
+            )
             if profile:
                 for workout in workouts:
                     workout["energy"] = workout_energy(workout, weight, resting)
@@ -367,7 +438,7 @@ class Store:
                         workout["energy"]["source"] = "AI 辅助 MET；热量按有效身体资料计算"
                         workout["energy"]["ai_stale"] = source["result"].get("stale", True)
             exercise = sum(workout.get("energy", {}).get("net_kcal", 0) for workout in workouts)
-            base = resting * profile["activity_factor"] if profile else None
+            base = resting * activity_factor(profile) if profile and resting else None
             expenditure = base + exercise if profile else None
             completed = bool(
                 self.rows(
@@ -472,7 +543,11 @@ class Store:
         with self.lock:
             weight = self.effective_weight(uid, day, profile["initial_weight_kg"])
             body = self.body(uid, day)
-            resting = (body or {}).get("resting_kcal") or profile["resting_kcal"]
+            resting = (
+                (body or {}).get("resting_kcal")
+                or profile.get("resting_kcal")
+                or resting_estimate(profile, weight)
+            )
             first = (date.fromisoformat(day) - timedelta(days=6)).isoformat()
             recent = []
             workout_days = 0
@@ -481,7 +556,13 @@ class Store:
                 meals = self.entries(uid, "meal", item, item)
                 workouts = self.entries(uid, "workout", item, item)
                 daily_weight = self.effective_weight(uid, item, profile["initial_weight_kg"])
-                daily_rest = (measured or {}).get("resting_kcal") or profile["resting_kcal"]
+                daily_rest = (
+                    (measured or {}).get("resting_kcal")
+                    or profile.get("resting_kcal")
+                    or resting_estimate(profile, daily_weight)
+                )
+                if daily_rest is None:
+                    daily_rest = 1800
                 exercise = sum(
                     workout_energy(workout, daily_weight, daily_rest)["net_kcal"]
                     for workout in workouts
@@ -512,6 +593,8 @@ class Store:
                         "sex",
                         "body_fat_pct",
                         "resting_kcal",
+                        "age",
+                        "activity_level",
                         "activity_factor",
                         "target_weight_kg",
                     )
@@ -521,7 +604,7 @@ class Store:
                 "average_exercise_net_kcal_7d": exercise_average,
                 "recorded_training_days_7d": workout_days,
                 "estimated_maintenance_kcal": round(
-                    resting * profile["activity_factor"] + exercise_average, 1
+                    resting * activity_factor(profile) + exercise_average, 1
                 ),
                 "recent_days": recent,
             }

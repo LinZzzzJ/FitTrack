@@ -230,6 +230,11 @@
             </div>{/each}
         </div>
       </div>
+      <div class="nutrient-summary dashboard-nutrients">
+        <span>膳食纤维 <strong>{number(day.totals.fiber_g, 1)} g</strong></span>
+        <span>总糖 <strong>{number(day.totals.sugar_g, 1)} g</strong></span>
+        <span>钠 <strong>{number(day.totals.sodium_mg, 0)} mg</strong></span>
+      </div>
     </section>
   </div>
   <div class="two-columns">

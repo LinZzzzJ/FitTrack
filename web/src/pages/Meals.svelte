@@ -39,6 +39,8 @@
   type Photo = { id: string; width?: number; height?: number };
   let image = $state<Photo | null>(null),
     note = $state(""),
+    mealDescription = $state(""),
+    estimatingMeal = $state(false),
     slot = $state<Meal["slot"]>("lunch"),
     dragging = $state(false);
   let draft = $state<Meal | null>(null),
@@ -70,7 +72,7 @@
       deletingJob = null;
       try {
         await refresh();
-        notify("照片分析记录已删除，已入账餐食和原图已保留");
+        notify("餐食分析记录已删除，已入账餐食和原图已保留");
       } catch {
         notify("分析记录已删除，列表刷新失败，请刷新页面查看", true);
       }
@@ -89,6 +91,9 @@
         protein_g: null,
         carbs_g: null,
         fat_g: null,
+        fiber_g: null,
+        sugar_g: null,
+        sodium_mg: null,
         assumptions: [],
       },
       portion: { mode: "grams", grams: null, pack_grams: null, packs: null },
@@ -108,6 +113,9 @@
     protein_g: 0,
     carbs_g: 0,
     fat_g: 0,
+    fiber_g: null,
+    sugar_g: null,
+    sodium_mg: null,
   });
   let mealJobs = $derived(
     app.day?.jobs.filter((job) => job.kind === "meal") || [],
@@ -249,6 +257,7 @@
     );
   }
   function manual() {
+    mealDescription = "";
     if (mealMode === "label") {
       labelDraft = {
         date: app.date,
@@ -349,9 +358,49 @@
     if (!Number.isFinite(grams) || grams < 0) return;
     const ratio =
       item.estimated_edible_grams > 0 ? grams / item.estimated_edible_grams : 1;
-    for (const key of ["kcal", "protein_g", "carbs_g", "fat_g"] as const)
-      item[key] = Math.round(item[key] * ratio * 100) / 100;
+    for (const key of [
+      "kcal",
+      "protein_g",
+      "carbs_g",
+      "fat_g",
+      "fiber_g",
+      "sugar_g",
+      "sodium_mg",
+    ] as const) {
+      if (item[key] != null) item[key] = Math.round(item[key]! * ratio * 100) / 100;
+    }
     item.estimated_edible_grams = grams;
+  }
+  async function estimateManual() {
+    if (!draft || estimatingMeal || mealDescription.trim().length < 3) return;
+    estimatingMeal = true;
+    try {
+      let job = await api.post<Job>("/jobs", {
+        kind: "meal",
+        date: draft.date,
+        slot: draft.slot,
+        note: draft.note || "",
+        meal_description: mealDescription.trim(),
+        image_id: image?.id || null,
+        request_key: crypto.randomUUID(),
+      });
+      while (["queued", "running"].includes(job.status)) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        job = await api.get<Job>(`/jobs/${job.id}`);
+      }
+      if (job.status !== "done" || !job.result?.items) {
+        throw new Error(job.error || "AI 估算未完成，可继续手动填写");
+      }
+      assumptions = job.result.assumptions || [];
+      draft.items = structuredClone($state.snapshot(job.result.items));
+      draft.image_id = job.request.image_id || null;
+      draft.source_job_id = job.id;
+      notify("营养草稿已生成，请核对后确认入账");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "AI 估算失败", true);
+    } finally {
+      estimatingMeal = false;
+    }
   }
   async function save(event: SubmitEvent) {
     event.preventDefault();
@@ -660,6 +709,12 @@
                   bind:value={item.fat_g}
                   required
                 /></label
+              ><label
+                >膳食纤维 / g<input type="number" min="0" max="2000" step="0.1" bind:value={item.fiber_g} placeholder="未知留空" /></label
+              ><label
+                >总糖 / g<input type="number" min="0" max="2000" step="0.1" bind:value={item.sugar_g} placeholder="未知留空" /></label
+              ><label
+                >钠 / mg<input type="number" min="0" max="100000" step="1" bind:value={item.sodium_mg} placeholder="未知留空" /></label
               >
             </div>
           </div>{/each}
@@ -669,6 +724,16 @@
         class="text-button"
         onclick={() => draft!.items.push(blankFood())}
         ><Plus size={16} />补充一种食物</button
+      ><div class="meal-ai-entry">
+        <label
+          >餐食描述<textarea bind:value={mealDescription} rows="2" maxlength="4000" placeholder="例如：一碗米饭、两块煎鸡胸肉，约 150 克，少油"></textarea></label
+        ><button type="button" class="secondary" disabled={estimatingMeal || app.busy || mealDescription.trim().length < 3} onclick={estimateManual}><Sparkles size={16} />{estimatingMeal ? "估算中…" : "AI 生成营养草稿"}</button>
+      </div>
+      {#if draft.items.some((item) => item.fiber_g != null || item.sugar_g != null || item.sodium_mg != null)}<div class="nutrient-summary">
+        <span>膳食纤维 <strong>{number(draft.items.every((item) => item.fiber_g != null) ? draft.items.reduce((sum, item) => sum + (item.fiber_g || 0), 0) : null, 1)} g</strong></span>
+        <span>总糖 <strong>{number(draft.items.every((item) => item.sugar_g != null) ? draft.items.reduce((sum, item) => sum + (item.sugar_g || 0), 0) : null, 1)} g</strong></span>
+        <span>钠 <strong>{number(draft.items.every((item) => item.sodium_mg != null) ? draft.items.reduce((sum, item) => sum + (item.sodium_mg || 0), 0) : null, 0)} mg</strong></span>
+      </div>{/if}
       ><label
         >餐食备注<textarea bind:value={draft.note} rows="2" maxlength="2000"
         ></textarea></label
@@ -707,7 +772,7 @@
     </form></Modal
   >{/if}
 {#if deletingJob}<Modal
-    title="删除这条照片分析记录？"
+    title="删除这条餐食分析记录？"
     onclose={() => {
       if (!app.busy) deletingJob = null;
     }}

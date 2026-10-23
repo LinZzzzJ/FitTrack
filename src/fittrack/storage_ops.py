@@ -23,6 +23,7 @@ from fittrack.models import (
     Meal,
     Profile,
     TrainingPlan,
+    WorkoutTemplate,
     Workout,
 )
 from fittrack.paths import write_json, read_json
@@ -83,8 +84,10 @@ def validate_coaching_links(store, uid):
 
 
 def validate_rows(tables):
-    if set(tables) != set(HEALTH_TABLES):
+    legacy_tables = set(HEALTH_TABLES) - {"workout_templates"}
+    if set(tables) not in (set(HEALTH_TABLES), legacy_tables):
         raise ValueError("备份缺少必要的数据表")
+    tables.setdefault("workout_templates", [])
     models = {"profiles": Profile, "bodies": BodyRecord}
     for table, rows in tables.items():
         if not isinstance(rows, list) or len(rows) > 100000:
@@ -103,8 +106,20 @@ def validate_rows(tables):
                 if row["kind"] == "meal" and entry.get("nutrition_label"):
                     from fittrack.nutrition import label_food
 
-                    if entry["items"] != [label_food(entry["nutrition_label"])]:
+                    expected = Meal.model_validate(
+                        {
+                            "date": entry["date"],
+                            "slot": entry["slot"],
+                            "title": entry.get("title", ""),
+                            "note": entry.get("note", ""),
+                            "items": [label_food(entry["nutrition_label"])],
+                        }
+                    ).model_dump(mode="json")["items"]
+                    actual = Meal.model_validate(entry).model_dump(mode="json")["items"]
+                    if actual != expected:
                         raise ValueError("标签记录与营养计算结果不一致")
+            elif table == "workout_templates":
+                WorkoutTemplate.model_validate(json.loads(row["data"]))
             elif table == "jobs":
                 request = JobRequest.model_validate(json.loads(row["request"]))
                 if request.kind != row["kind"] or request.date.isoformat() != row["date"]:
@@ -371,7 +386,7 @@ class StorageOperations:
                 table: source.rows(f"SELECT * FROM {table} WHERE user_id=?", (uid,))
                 for table in HEALTH_TABLES
             }
-            manifest = {"format": "fittrack-health", "version": 1, "tables": tables}
+            manifest = {"format": "fittrack-health", "version": 2, "tables": tables}
             folder = self.paths.root / "backups" / uid
             folder.mkdir(exist_ok=True)
             ident = identifier()
@@ -410,7 +425,7 @@ class StorageOperations:
                 ):
                     raise ValueError("备份清单缺失或过大")
                 manifest = json.loads(archive.read("manifest.json"))
-                if manifest.get("format") != "fittrack-health" or manifest.get("version") != 1:
+                if manifest.get("format") != "fittrack-health" or manifest.get("version") not in {1, 2}:
                     raise ValueError("不支持此备份格式")
                 tables = manifest["tables"]
                 validate_rows(tables)

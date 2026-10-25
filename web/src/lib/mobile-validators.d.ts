@@ -1,0 +1,16 @@
+export declare const Profile: (data: unknown) => boolean;
+export declare const BodyRecord: (data: unknown) => boolean;
+export declare const Meal: (data: unknown) => boolean;
+export declare const Workout: (data: unknown) => boolean;
+export declare const TrainingPlan: (data: unknown) => boolean;
+export declare const WorkoutTemplate: (data: unknown) => boolean;
+export declare const NutritionLabel: (data: unknown) => boolean;
+export declare const JobRequest: (data: unknown) => boolean;
+export declare const AISettings: (data: unknown) => boolean;
+export declare const FoodItem: (data: unknown) => boolean;
+export declare const LabelReadout: (data: unknown) => boolean;
+export declare const MealEstimate: (data: unknown) => boolean;
+export declare const CoachFeedback: (data: unknown) => boolean;
+export declare const CardioEstimate: (data: unknown) => boolean;
+export declare const WeeklyReview: (data: unknown) => boolean;
+export declare const GoalSuggestion: (data: unknown) => boolean;

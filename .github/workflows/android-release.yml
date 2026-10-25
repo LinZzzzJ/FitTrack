@@ -1,0 +1,78 @@
+name: Android release APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Build mobile bundle and release APK
+        working-directory: web
+        run: |
+          npm ci
+          npm run build:mobile
+          ./android/gradlew -p android --no-daemon assembleRelease
+      - name: Check release signing configuration
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.FITTRACK_KEYSTORE_BASE64 }}
+          KEY_PASSWORD: ${{ secrets.FITTRACK_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FITTRACK_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEY_PASSWORD" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Sign and checksum APK
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.FITTRACK_KEYSTORE_BASE64 }}
+          KEY_PASSWORD: ${{ secrets.FITTRACK_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FITTRACK_KEY_ALIAS }}
+        run: |
+          umask 077
+          trap 'rm -f fittrack-release.jks FitTrack-aligned.apk' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > fittrack-release.jks
+          tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          apk="$(find web/android/app/build/outputs/apk/release -name '*.apk' -type f | head -1)"
+          aligned="FitTrack-aligned.apk"
+          out="FitTrack-release.apk"
+          "$tools/zipalign" -P 16 -f 4 "$apk" "$aligned"
+          "$tools/apksigner" sign --ks fittrack-release.jks --ks-key-alias "$KEY_ALIAS" --ks-pass env:KEY_PASSWORD --out "$out" "$aligned"
+          "$tools/apksigner" verify --verbose "$out"
+          sha256sum "$out" > "$out.sha256"
+          rm -f fittrack-release.jks "$aligned"
+      - name: Upload unsigned APK when no release key is configured
+        if: steps.signing.outputs.ready != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fittrack-unsigned-apk
+          path: web/android/app/build/outputs/apk/release/*.apk
+      - name: Upload signed APK
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fittrack-release-apk
+          path: |
+            FitTrack-release.apk
+            FitTrack-release.apk.sha256

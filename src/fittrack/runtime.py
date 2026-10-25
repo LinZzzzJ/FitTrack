@@ -12,6 +12,7 @@ class RuntimeConfig:
     mode: str = "local"
     public_url: str = ""
     providers: list[str] = field(default_factory=lambda: ["https://api.deepseek.com"])
+    allow_registration: bool = False
 
     def __post_init__(self):
         if self.mode not in {"local", "server"}:

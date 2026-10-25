@@ -4,12 +4,24 @@
   "version": "0.4.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
+    "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
+    "build": "node node_modules/vite/bin/vite.js build",
+    "build:mobile": "node node_modules/vite/bin/vite.js build --mode mobile && node node_modules/@capacitor/cli/bin/capacitor sync android",
+    "android:open": "node node_modules/@capacitor/cli/bin/capacitor open android",
+    "android:debug": "node node_modules/@capacitor/cli/bin/capacitor run android",
+    "check": "node node_modules/svelte-check/bin/svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "test": "node node_modules/vitest/vitest.mjs run --maxWorkers 2"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^7.0.3",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/filesystem": "^7.1.9",
+    "@capacitor/preferences": "^7.0.4",
+    "@capacitor/share": "^7.0.4",
     "@lucide/svelte": "^1.55.0",
+    "@zip.js/zip.js": "^2.24.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "echarts": "^6.0.0",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4"
@@ -25,6 +37,9 @@
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.6",
     "typescript": "~6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "@capacitor/cli": "^7.6.9",
+    "@capacitor/android": "^7.6.9"
   }
 }

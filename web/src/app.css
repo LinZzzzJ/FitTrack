@@ -3163,3 +3163,94 @@ dialog::backdrop {
   flex-shrink: 0;
   margin-top: 4px;
 }
+
+.exercise-catalog-panel {
+  margin-top: 22px;
+}
+.exercise-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.exercise-catalog-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e0e9dc;
+  border-radius: 12px;
+  background: #fbfdf9;
+}
+.exercise-catalog-card > div:last-child {
+  padding: 10px 12px 13px;
+}
+.exercise-catalog-card strong,
+.exercise-catalog-card small {
+  display: block;
+}
+.exercise-catalog-card strong {
+  color: #42634d;
+  font-size: 12px;
+}
+.exercise-catalog-card small {
+  margin-top: 5px;
+  color: #8a9a84;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.exercise-motion {
+  display: grid;
+  place-items: center;
+  height: 110px;
+  background: linear-gradient(145deg, #eff6ea, #f8fbf4);
+  color: #5d9468;
+}
+.exercise-motion svg {
+  width: 92px;
+  height: 82px;
+}
+.exercise-motion path,
+.exercise-motion circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+.exercise-motion .motion-head {
+  fill: #dcebd4;
+  stroke-width: 2;
+}
+.exercise-motion .motion-accent {
+  stroke: #d6a34f;
+  stroke-width: 4;
+  animation: exercise-pulse 1.4s ease-in-out infinite alternate;
+}
+.exercise-motion .motion-body {
+  transform-origin: 60px 55px;
+  animation: exercise-sway 1.8s ease-in-out infinite alternate;
+}
+.exercise-motion .motion-ground {
+  stroke: #c7d9bf;
+  stroke-width: 2;
+}
+@keyframes exercise-sway {
+  from { transform: rotate(-4deg); }
+  to { transform: rotate(4deg); }
+}
+@keyframes exercise-pulse {
+  from { opacity: .45; transform: translateX(-3px); }
+  to { opacity: 1; transform: translateX(3px); }
+}
+@media (max-width: 900px) {
+  .exercise-catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .exercise-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.exercise-motion { position: relative; }
+.exercise-motion line { stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; }
+.exercise-motion .motion-equipment { stroke: #b6c9af; stroke-width: 2; }
+.exercise-motion .motion-weight { fill: #d5a34f; stroke: #bc8e41; stroke-width: 1; }
+.motion-toggle { position: absolute; right: 5px; bottom: 5px; background: #ffffffb0; border: 0; border-radius: 5px; padding: 3px 6px; font-size: 9px; color: #637b5d; }
+.pairing-code { font-size: 24px; letter-spacing: .18em; color: var(--green); }
+@media (max-width:640px) { body { padding-top: env(safe-area-inset-top); } .app-shell { padding-bottom: env(safe-area-inset-bottom); } input,select,textarea { font-size: 16px; } }

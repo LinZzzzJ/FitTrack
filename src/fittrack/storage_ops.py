@@ -101,7 +101,9 @@ def validate_rows(tables):
                 model = {"meal": Meal, "workout": Workout, "plan": TrainingPlan}.get(row["kind"])
                 if model is None:
                     raise ValueError("记录类型不支持")
-                model.model_validate(json.loads(row["data"]))
+                normalized = model.model_validate(json.loads(row["data"]))
+                if row["kind"] == "meal" and normalized.nutrition_mode == "precise":
+                    row["data"] = encode(normalized.model_dump(mode="json"))
                 entry = json.loads(row["data"])
                 if row["kind"] == "meal" and entry.get("nutrition_label"):
                     from fittrack.nutrition import label_food

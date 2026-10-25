@@ -160,3 +160,12 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ---
 
 <p align="center"><sub>FitTrack · 轻衡<br />慢慢来，也是一种力量。</sub></p>
+
+## Android
+
+[下载 Android 首个预发布 APK](https://github.com/LinZzzzJ/FitTrack/releases/tag/v0.4.0-android.1)（Android 8+；真机验收待完成）。
+
+Android 源码与签名 APK 构建流程已加入，支持本机记录与连接自己的 HTTPS FitTrack 服务器，
+保留现有 FitTrack 风格。PC/手机通过健康 ZIP v1/v2 双向交换；动作库内置 48 个原创动画示意。
+PC API 与数据格式继续兼容，移动同步单独版本化。使用、签名保管及未验证边界见
+[Android 指南](docs/android.md)。此源码状态不代表旧 v0.4.0 Windows Release 附件已更新。

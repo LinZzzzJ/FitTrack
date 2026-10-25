@@ -17,7 +17,8 @@
   import Chart from "../components/Chart.svelte";
   import DietHistory from "../components/DietHistory.svelte";
   import NutritionLabelEditor from "../components/NutritionLabelEditor.svelte";
-  import { api, imageUrl } from "../lib/api";
+  import OwnedImage from "../components/OwnedImage.svelte";
+  import { api } from "../lib/api";
   import {
     app,
     number,
@@ -604,8 +605,8 @@
       ondrop={dropPhoto}
       onclick={() => fileInput?.click()}
       disabled={app.busy}
-      >{#if image}<img
-          src={imageUrl(image.id)}
+      >{#if image}<OwnedImage
+          id={image.id}
           alt="已上传的餐食照片"
           onload={(event) => {
             const photo = event.currentTarget as HTMLImageElement;
@@ -698,9 +699,9 @@
       按原图比例显示，不裁剪；可滚动查看整张照片。AI
       使用完整画面，必要时会等比缩小。
     </p>
-    <img
+    <OwnedImage
       class="full-meal-photo"
-      src={imageUrl(preview.id)}
+      id={preview.id}
       alt="完整餐食原图"
     />
   </Modal>{/if}

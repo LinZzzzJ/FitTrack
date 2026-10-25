@@ -41,5 +41,6 @@ jobs:
       - name: Backend lint
         run: python -B -m ruff check src tests scripts
       - run: npm --prefix web ci
+      - run: npm --prefix web test
       - run: npm --prefix web run check
       - run: npm --prefix web run build

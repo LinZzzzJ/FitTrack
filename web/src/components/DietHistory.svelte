@@ -11,7 +11,8 @@
     RotateCcw,
     LoaderCircle,
   } from "@lucide/svelte";
-  import { api, imageUrl } from "../lib/api";
+  import OwnedImage from "./OwnedImage.svelte";
+  import { api } from "../lib/api";
   import { app, number } from "../lib/state.svelte";
   import { dietWeek, shiftDate } from "../lib/tracking";
   import type { DietHistory, Meal, Job } from "../lib/types";
@@ -154,9 +155,9 @@
                 class="meal-photo-button"
                 aria-label="查看已入账餐食原图"
                 onclick={() => onphoto(meal.image_id!)}
-                ><img
+                ><OwnedImage
                   class="meal-photo"
-                  src={imageUrl(meal.image_id, true)}
+                  id={meal.image_id} thumb={true}
                   alt={meal.title || slots[meal.slot]}
                 /></button
               >{:else}<div class="meal-photo meal-photo-placeholder">
@@ -217,8 +218,8 @@
                   type="button"
                   aria-label="查看任务餐食原图"
                   onclick={() => onphoto(job.request.image_id!)}
-                  ><img
-                    src={imageUrl(job.request.image_id, true)}
+                  ><OwnedImage
+                    id={job.request.image_id} thumb={true}
                     alt="任务餐食缩略图"
                   /></button
                 >{/if}

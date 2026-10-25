@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { isMobile, mobileConnection } from "./lib/mobile";
+  import { syncNow } from "./lib/sync";
+  import { refresh } from "./lib/state.svelte";
   import { onMount } from "svelte";
   import {
     Leaf,
@@ -58,10 +61,16 @@
     void init();
     void checkVersion();
     const timer = setInterval(() => void checkVersion(), 30000);
-    const onFocus = () => void checkVersion();
+    const onFocus = () => { void checkVersion(); if(mobileConnection()) void syncNow(); };
+    const onLocalChange = () => { if(isMobile) void refresh().catch(()=>{}); };
+    const syncTimer = isMobile ? setInterval(()=>{ if(mobileConnection()) void syncNow(); },30000) : undefined;
+    if(isMobile) { window.addEventListener("fittrack-local-change",onLocalChange); window.addEventListener("online",onFocus); }
     window.addEventListener("focus", onFocus);
     return () => {
       clearInterval(timer);
+      clearInterval(syncTimer);
+      window.removeEventListener("fittrack-local-change",onLocalChange);
+      window.removeEventListener("online",onFocus);
       window.removeEventListener("focus", onFocus);
     };
   });
@@ -188,7 +197,7 @@
             />{:else if app.page === "trends"}<Trends />{:else}<Settings
             />{/if}{/key}
         <footer class="app-footer">
-          <span><ShieldCheck size={13} />记录保存在本机</span><span
+          <span><ShieldCheck size={13} />{isMobile ? mobileConnection() ? "服务器与本机副本" : "记录保存在手机" : app.runtime?.mode === "server" ? "记录保存在服务器" : "记录保存在本机"}</span><span
             >FitTrack · 轻衡 {compatibility.version
               ? `v${compatibility.version}`
               : ""} <i> / </i> 消耗与食物热量均为估计</span

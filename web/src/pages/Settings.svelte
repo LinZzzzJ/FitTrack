@@ -12,6 +12,8 @@
   import { api } from "../lib/api";
   import { app, perform, notify, number } from "../lib/state.svelte";
   import type { AIConfig, Profile, Day, Job } from "../lib/types";
+  import MobileSettings from "../components/MobileSettings.svelte";
+  import { isMobile } from "../lib/mobile";
   import DataManagement from "../components/DataManagement.svelte";
   type ProfileForm = Omit<
     Profile,
@@ -54,6 +56,11 @@
   }
   let profileForm: HTMLFormElement;
   let goalJob = $state<Job | null>(null);
+  let mobileDevices = $state<{id:string;name:string;created_at:number}[]>([]);
+  let pairingCode = $state("");
+  let pairingTimer:ReturnType<typeof setTimeout>|undefined;
+  let pairingExpires = $state(0);
+  let pairingPending = $state(false);
   let submittingGoal = $state(false);
   let adoptingGoal = $state(false);
   let goalError = $state("");
@@ -167,6 +174,7 @@
     }
   }
   onMount(() => {
+    if(!isMobile) void api.get<typeof mobileDevices>("/mobile/devices").then(value=>mobileDevices=value).catch(()=>{});
     void api
       .get<Day>(`/days/${app.today}`)
       .then((day) => {
@@ -177,6 +185,7 @@
     return () => {
       disposed = true;
       clearTimeout(goalTimer);
+      clearTimeout(pairingTimer);
     };
   });
   async function generateGoal() {
@@ -295,6 +304,27 @@
           credential_error: "",
         };
     }, "此账号的 Key 已清除");
+  }
+  async function revokeDevice(id:string) {
+    if(!confirm("撤销此 Android 设备？设备上的记录仍会保留，再次访问服务器需要重新配对。")) return;
+    try { await api.delete("/mobile/devices/"+id); mobileDevices=mobileDevices.filter(d=>d.id!==id);notify("设备访问已撤销"); }
+    catch(error){notify(error instanceof Error?error.message:"撤销失败",true);}
+  }
+  async function createPairing() {
+    if (pairingPending) return;
+    pairingPending = true;
+    try {
+      const result = await api.post<{ code: string; expires_in: number }>("/mobile/pair/create");
+      pairingCode = result.code;
+      clearTimeout(pairingTimer);
+      pairingTimer = setTimeout(()=>pairingCode="",result.expires_in*1000);
+      pairingExpires = result.expires_in;
+      notify("配对码已生成，请在 5 分钟内输入手机");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "配对码生成失败", true);
+    } finally {
+      pairingPending = false;
+    }
   }
 </script>
 
@@ -652,4 +682,22 @@
       </p>{/if}
   </form>
 </section>
-{#if app.runtime}<DataManagement />{/if}
+{#if isMobile}<MobileSettings />{:else if app.runtime}<DataManagement />{/if}
+{#if !isMobile}<section class="panel mobile-pairing-panel">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">ANDROID CONNECTION</span>
+      <h3>连接 Android 手机</h3>
+    </div>
+    <span class="badge">一次性配对</span>
+  </div>
+  <p class="muted">生成一次性配对码后，在 FitTrack Android 应用中输入服务器地址和配对码。配对码不会显示密码，也不会写入健康备份。</p>
+  <div class="form-actions">
+    <button class="secondary" type="button" disabled={pairingPending} onclick={() => void createPairing()}>
+      {pairingPending ? "生成中…" : "生成配对码"}
+    </button>
+    {#if pairingCode}<code class="pairing-code" aria-label="Android 配对码">{pairingCode}</code><span class="small muted">约 {Math.ceil(pairingExpires / 60)} 分钟内有效</span>{/if}
+  </div>
+  {#if mobileDevices.length}<details><summary>已配对设备（{mobileDevices.length}）</summary>{#each mobileDevices as device}<div class="storage-personal"><span>{device.name} · {new Date(device.created_at*1000).toLocaleDateString("zh-CN")}</span><button type="button" class="secondary" onclick={()=>void revokeDevice(device.id)}>撤销设备</button></div>{/each}</details>{/if}
+</section>
+{/if}

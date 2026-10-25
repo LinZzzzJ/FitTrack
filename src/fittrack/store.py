@@ -19,6 +19,7 @@ from fittrack.calculations import (
     workout_energy,
 )
 from fittrack.config import atomic_bytes
+from fittrack.mobile_auth import device_schema
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, is_admin INTEGER NOT NULL, created_at REAL NOT NULL);
@@ -80,7 +81,7 @@ class Store:
             schema = "CREATE TABLE IF NOT EXISTS owners(id TEXT PRIMARY KEY);\n" + schema.replace(
                 "REFERENCES users(id)", "REFERENCES owners(id)"
             )
-        self.db.executescript(schema)
+        self.db.executescript(schema + (device_schema() if not owner_id else ""))
         if owner_id:
             prior = self.rows("SELECT id FROM owners")
             if prior and prior[0]["id"] != owner_id:
@@ -187,8 +188,7 @@ class Store:
 
     def templates(self, uid):
         return [
-            json.loads(row["data"])
-            | {"id": row["id"]}
+            json.loads(row["data"]) | {"id": row["id"]}
             for row in self.rows(
                 "SELECT id,data FROM workout_templates WHERE user_id=? ORDER BY created_at,id",
                 (uid,),

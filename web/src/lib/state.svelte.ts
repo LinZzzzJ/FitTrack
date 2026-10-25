@@ -1,3 +1,5 @@
+import { isMobile, clearMobileConnection, mobileConnection } from "./mobile";
+import { syncNow } from "./sync";
 import { api, ApiError } from "./api";
 import { loadTrends } from "./tracking";
 export { shiftDate } from "./tracking";
@@ -63,6 +65,7 @@ export async function refresh() {
   if (generation !== refreshGeneration || selected !== app.date || !app.user)
     return;
   app.day = day;
+  if (isMobile && day.profile) app.profile = day.profile;
   app.trends = trend.days;
   app.plans = trend.plans;
 }
@@ -86,6 +89,7 @@ export async function perform(
 }
 export function connectEvents() {
   source?.close();
+  if (isMobile) return;
   source = new EventSource("/api/events");
   source.onmessage = () => {
     void refresh().catch(() => {});
@@ -108,6 +112,7 @@ export async function init() {
     if (!me.profile) app.page = "settings";
     await refresh();
     connectEvents();
+    if (mobileConnection()) void syncNow();
   } catch (error) {
     if (!(error instanceof ApiError && error.status === 401))
       notify(error instanceof Error ? error.message : "无法连接本地服务", true);
@@ -119,6 +124,7 @@ export async function logout() {
   await api.post("/auth/logout");
   source?.close();
   source = null;
+  if (isMobile) await clearMobileConnection();
   refreshGeneration++;
   app.user = null;
   app.profile = null;

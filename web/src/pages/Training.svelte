@@ -28,6 +28,7 @@
   } from "@lucide/svelte";
   import Modal from "../components/Modal.svelte";
   import CardioAssistant from "../components/CardioAssistant.svelte";
+  import ExerciseMotion from "../components/ExerciseMotion.svelte";
   import { api } from "../lib/api";
   import {
     app,
@@ -55,6 +56,11 @@
     csvHeaders = $state<string[]>([]),
     csvRows = $state<Record<string, string>[]>([]),
     csvMapping = $state<Record<string, string>>({});
+  type CatalogItem = { id: string; name: string; body_part: string; cue: string };
+  let catalog = $state<CatalogItem[]>([]);
+  let catalogPart = $state("back");
+  let catalogSearch = $state("");
+  let filteredCatalog = $derived(catalog.filter(item => (catalogPart === "all" || item.body_part === catalogPart) && item.name.includes(catalogSearch)));
   let qrVideo = $state<HTMLVideoElement>();
   let qrFileInput = $state<HTMLInputElement>();
   let cameraStream: MediaStream | null = null;
@@ -122,6 +128,10 @@
       .catch((error) =>
         notify(error instanceof Error ? error.message : "无法读取训练模板", true),
       );
+    void api
+      .get<{ version: number; exercises: CatalogItem[] }>("/exercise-catalog")
+      .then((value) => (catalog = value.exercises))
+      .catch(() => {});
   });
   async function loadMonth() {
     const selected = month;
@@ -571,6 +581,25 @@
 </div>
 <input bind:this={importInput} class="visually-hidden" type="file" accept=".json,.csv,application/json,text/csv" onchange={(event) => void importFile(event.currentTarget.files?.[0])} />
 <input bind:this={qrFileInput} class="visually-hidden" type="file" accept="image/*" onchange={(event) => void readQrImage(event.currentTarget.files?.[0])} />
+{#if catalog.length}<section class="panel exercise-catalog-panel">
+  <div class="section-heading">
+    <div><span class="eyebrow">MOVEMENT LIBRARY</span><h3>动作库</h3></div>
+    <span class="badge">{catalog.length} 个动作 · 离线动画示意</span>
+  </div>
+  <div class="form-grid"><label>训练部位<select aria-label="动作库部位" bind:value={catalogPart}><option value="all">全部</option><option value="back">背部</option><option value="chest">胸部</option><option value="shoulders">肩部</option><option value="arms">手臂</option><option value="legs">腿部</option><option value="core">核心</option><option value="full_body">全身</option><option value="cardio">有氧</option></select></label><label>查找动作<input bind:value={catalogSearch} placeholder="按动作名称搜索" /></label></div>
+  <p class="small muted">原创简化动作范围示意；训练前请确认适合自己的动作、负重和幅度。</p>
+  <div class="exercise-catalog-grid">
+    {#each filteredCatalog as item}<article class="exercise-catalog-card">
+      <ExerciseMotion exerciseId={item.id} label={item.name} />
+      <div><strong>{item.name}</strong><small>{item.cue}</small><button class="secondary small-button" onclick={() => {
+        openWorkout();
+        if (draft) { draft.title = item.name; draft.exercises = [{ name: item.name, sets: [{ reps: 10, weight_kg: 0 }] }];
+          if (item.body_part === "cardio") { draft.kind="cardio"; draft.activity=({"treadmill-walk":"walking","treadmill-run":"running","stationary-bike":"cycling","elliptical":"elliptical","rowing-machine":"rowing","jump-rope":"circuit"} as Record<string,string>)[item.id] || "walking"; draft.exercises=[]; }
+        }
+      }}>用此动作训练</button></div>
+    </article>{/each}
+  </div>
+</section>{/if}
 <section class="panel template-library">
   <div class="section-heading">
     <div><span class="eyebrow">QUICK START</span><h3>训练模板</h3></div>

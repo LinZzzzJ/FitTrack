@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FitTrack 轻衡</string>
+    <string name="title_activity_main">FitTrack 轻衡</string>
+    <string name="package_name">com.fittrack.qingheng</string>
+    <string name="custom_url_scheme">com.fittrack.qingheng</string>
+</resources>

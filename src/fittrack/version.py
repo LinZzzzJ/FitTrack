@@ -21,6 +21,9 @@ CAPABILITIES = [
     "activity_estimates",
     "meal_entry_modes",
     "precise_meal_energy",
+    "exercise_catalog",
+    "mobile_pairing",
+    "mobile_sync_v1",
 ]
 
 

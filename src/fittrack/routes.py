@@ -8,6 +8,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pwdlib import PasswordHash
 
 from fittrack.calculations import ACTIVITIES, ACTIVITY_LEVELS, dates_between, today, workout_energy
+from fittrack.exercise_catalog import exercise_catalog
+from fittrack.mobile_auth import create_pair, redeem_pair, request_token
 from fittrack.models import (
     AISettings,
     BodyRecord,
@@ -29,7 +31,7 @@ dummy_hash = password_hash.hash("fittrack-timing-placeholder")
 
 def current_user(request: Request):
     try:
-        return request.app.state.store.session_user(request.cookies.get(COOKIE, ""))
+        return request.app.state.store.session_user(request_token(request))
     except KeyError:
         raise HTTPException(401, "请登录后继续") from None
 
@@ -60,6 +62,13 @@ def router():
 
     @api.post("/auth/register", status_code=201)
     def register(body: Credentials, request: Request, response: Response):
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and runtime.config.mode == "server":
+            if not runtime.config.allow_registration:
+                raise HTTPException(403, "管理员未开放注册，请使用已有账号配对手机")
+            request.app.state.auth_limiter.check(
+                request.client.host if request.client else "unknown"
+            )
         username = body.username.strip().casefold()
         if len(username) < 2:
             raise ValueError("用户名至少为两个字符")
@@ -73,6 +82,11 @@ def router():
 
     @api.post("/auth/login")
     def login(body: Credentials, request: Request, response: Response):
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and runtime.config.mode == "server":
+            request.app.state.auth_limiter.check(
+                request.client.host if request.client else "unknown"
+            )
         store = request.app.state.store
         rows = store.rows(
             "SELECT id,password_hash FROM users WHERE username=?",
@@ -89,10 +103,73 @@ def router():
     @api.post("/auth/logout", status_code=204)
     def logout(request: Request, response: Response, user=Depends(current_user)):
         settings = request.app.state.settings
+        token = request_token(request)
         if hasattr(settings, "logout"):
-            settings.logout(user["id"], request.cookies.get(COOKIE, ""))
-        request.app.state.store.logout(request.cookies.get(COOKIE, ""))
+            settings.logout(user["id"], token)
+        request.app.state.store.logout(token)
         response.delete_cookie(COOKIE, path="/")
+
+    @api.post("/mobile/pair/create")
+    def create_mobile_pair(request: Request, user=Depends(current_user)):
+        """Create a short-lived code for a native app without exposing a password."""
+        if request.headers.get("authorization"):
+            raise HTTPException(403, "请从已登录的 PC 网页生成配对码")
+        control = getattr(request.app.state.store, "control", request.app.state.store)
+        return create_pair(control, user["id"])
+
+    @api.post("/mobile/pair/redeem")
+    def redeem_mobile_pair(body: dict, request: Request):
+        request.app.state.pairing_limiter.check(
+            request.client.host if request.client else "unknown"
+        )
+        code = body.get("code")
+        if (
+            set(body) != {"code"}
+            or not isinstance(code, str)
+            or len(code) != 8
+            or any(c not in "0123456789" for c in code)
+        ):
+            raise HTTPException(400, "配对码无效或已过期")
+        control = getattr(request.app.state.store, "control", request.app.state.store)
+        return redeem_pair(control, code)
+
+    @api.get("/mobile/devices")
+    def mobile_devices(request: Request, user=Depends(current_user)):
+        control = getattr(request.app.state.store, "control", request.app.state.store)
+        return control.rows(
+            "SELECT token_hash AS id,name,created_at FROM mobile_devices WHERE user_id=?",
+            (user["id"],),
+        )
+
+    @api.delete("/mobile/devices/{ident}", status_code=204)
+    def revoke_mobile_device(ident: str, request: Request, user=Depends(current_user)):
+        control = getattr(request.app.state.store, "control", request.app.state.store)
+        with control.lock:
+            rows = control.rows(
+                "SELECT token_hash FROM mobile_devices WHERE token_hash=? AND user_id=?",
+                (ident, user["id"]),
+            )
+            if not rows:
+                raise KeyError("设备不存在")
+            control.db.execute("DELETE FROM sessions WHERE token_hash=?", (ident,))
+
+    @api.post("/mobile/refresh")
+    def refresh_mobile_session(request: Request, user=Depends(current_user)):
+        if not request.headers.get("authorization"):
+            raise HTTPException(403, "此接口仅供设备令牌使用")
+        from fittrack.mobile_auth import digest
+        import time
+
+        control = getattr(request.app.state.store, "control", request.app.state.store)
+        with control.lock:
+            old = request_token(request)
+            token = control.session(user["id"])
+            control.db.execute(
+                "INSERT INTO mobile_devices VALUES(?,?,?,?)",
+                (digest(token), user["id"], "Android", time.time()),
+            )
+            control.logout(old)
+        return {"token": token, "expires_in": 14 * 86400, "user": user}
 
     @api.get("/me")
     def me(request: Request, user=Depends(current_user)):
@@ -100,7 +177,7 @@ def router():
             "user": user,
             "today": today(),
             "profile": request.app.state.store.profile(user["id"], today()),
-            "ai": request.app.state.settings.public_for(user["id"], request.cookies.get(COOKIE, ""))
+            "ai": request.app.state.settings.public_for(user["id"], request_token(request))
             if hasattr(request.app.state.settings, "public_for")
             else request.app.state.settings.public(),
             "runtime": request.app.state.runtime.config.capabilities(user)
@@ -108,7 +185,12 @@ def router():
             else None,
             "activities": ACTIVITIES,
             "activity_levels": ACTIVITY_LEVELS,
+            "exercise_catalog_version": 1,
         }
+
+    @api.get("/exercise-catalog")
+    def get_exercise_catalog():
+        return {"version": 1, "exercises": exercise_catalog()}
 
     @api.put("/settings")
     def settings(body: AISettings, request: Request, user=Depends(current_user)):
@@ -116,7 +198,7 @@ def router():
         values = body.model_dump(exclude_unset=True)
         if hasattr(settings, "save_for"):
             request.app.state.store.assert_writable(user["id"])
-            return settings.save_for(user["id"], request.cookies.get(COOKIE, ""), values)
+            return settings.save_for(user["id"], request_token(request), values)
         admin_user(user)
         return settings.save(values)
 
@@ -127,7 +209,7 @@ def router():
 
     @api.post("/settings/test-connection")
     def test_connection(request: Request, user=Depends(current_user)):
-        return request.app.state.settings.test_for(user["id"], request.cookies.get(COOKIE, ""))
+        return request.app.state.settings.test_for(user["id"], request_token(request))
 
     @api.get("/profile")
     def get_profile(request: Request, day: date | None = None, user=Depends(current_user)):
@@ -200,9 +282,7 @@ def router():
     @api.get("/workout-days")
     def workout_days(request: Request, start: date, end: date, user=Depends(current_user)):
         dates_between(start.isoformat(), end.isoformat())
-        return request.app.state.store.workout_dates(
-            user["id"], start.isoformat(), end.isoformat()
-        )
+        return request.app.state.store.workout_dates(user["id"], start.isoformat(), end.isoformat())
 
     @api.get("/workout-templates")
     def workout_templates(request: Request, user=Depends(current_user)):
@@ -212,17 +292,13 @@ def router():
     def create_workout_template(
         body: WorkoutTemplate, request: Request, user=Depends(current_user)
     ):
-        return request.app.state.store.save_template(
-            user["id"], body.model_dump(mode="json")
-        )
+        return request.app.state.store.save_template(user["id"], body.model_dump(mode="json"))
 
     @api.put("/workout-templates/{tid}")
     def update_workout_template(
         tid: str, body: WorkoutTemplate, request: Request, user=Depends(current_user)
     ):
-        return request.app.state.store.save_template(
-            user["id"], body.model_dump(mode="json"), tid
-        )
+        return request.app.state.store.save_template(user["id"], body.model_dump(mode="json"), tid)
 
     @api.delete("/workout-templates/{tid}", status_code=204)
     def delete_workout_template(tid: str, request: Request, user=Depends(current_user)):
@@ -337,7 +413,7 @@ def router():
     @api.post("/jobs", status_code=202)
     def submit(body: JobRequest, request: Request, user=Depends(current_user)):
         return request.app.state.runner.submit(
-            user["id"], body.model_dump(mode="json"), request.cookies.get(COOKIE, "")
+            user["id"], body.model_dump(mode="json"), request_token(request)
         )
 
     @api.get("/jobs/{jid}")
@@ -368,7 +444,7 @@ def router():
                         event = await asyncio.wait_for(queue.get(), timeout=15)
                     except asyncio.TimeoutError:
                         try:
-                            store.session_user(request.cookies.get(COOKIE, ""))
+                            store.session_user(request_token(request))
                         except KeyError:
                             break
                         yield ": heartbeat\n\n"

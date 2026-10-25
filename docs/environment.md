@@ -116,3 +116,12 @@ npm --prefix web run build
 Windows 便携版在独立 Windows 环境构建，入口见 `scripts/prepare_release.ps1`、`scripts/build_release.py` 和 `tools/portable.spec`。PyInstaller 包含平台相关运行组件，当前 Windows 包不能当作 Linux 可执行文件使用。[PyInstaller 官方说明](https://pyinstaller.org/en/stable/operating-mode.html)
 
 具体模块与待适配行为见 [架构](ARCHITECTURE.md)、[跨平台移植](migration.md)。
+
+## Android 构建环境（2026-10-25）
+
+本轮在 artifacts 下独立准备 Node 24.21.0、Java 21、Android SDK 35 和 Python 3.14.4 检查环境。
+Python 使用 `venv --without-pip` 后显式引导 pip，没有改写原来的 .venv 或系统工具。
+149项非便携后端测试、21项移动兼容测试、Svelte检查、PC/mobile构建及原生release编译通过。
+Android软件模拟器因缺少可用KVM权限未完成系统启动；未做真机或真实公网验收。
+此工具链目录是开发依赖，不是应用运行数据，也不进入APK。
+Android可重复构建与签名要求见 [构建脚本](../scripts/android/README.md)。

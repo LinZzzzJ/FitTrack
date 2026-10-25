@@ -53,3 +53,25 @@ Windows10为兼容目标，尚未在其他PC或纯净虚拟机实测；清理开
 ## 2026-10-24 · 餐食 AI/精确录入双模式
 
 最近一次已记录的 Linux 定向回归为 69 项通过，覆盖精确模式创建/编辑时的服务端 4/4/9 kcal 重算、忽略客户端热量、空重量、描述/整餐单项约束、超限拒绝、标签模式互斥和旧标签/餐食兼容。本轮 Windows `scripts/check.ps1` 通过 142 项 pytest、Ruff、Svelte/TypeScript（0 错误、0 警告）和生产构建；Windows Edge 隔离浏览器流程验证 AI/精确模式切换时清空精确营养输入、重新填写后按 4/4/9 入账、AI 来源清除、标签/旧餐食及营养统计，运行时错误为 0。自动 AI 使用模拟对象，没有访问用户数据库、图片或个人 Key。新便携包仍未构建或验收。
+
+## Android / PC 兼容检查（2026-10-25）
+
+本轮使用隔离的 Linux Python 3.14.4、Node 24.21.0、Java 21 和 Android SDK 35。
+全部数据为模拟账号与合成图片，未读取正式数据库、Key 或私人照片，未调用真实 AI。
+
+- Python：排除 Windows 专属 test_portable.py 后 149 项通过、2 项按 Windows 环境跳过。
+- 完整 Linux 检查的5项 Windows DLL、注册表、目录选择和快捷方式测试失败，原因是平台 API 不存在；
+  没有据此宣称完成本轮 Windows 成品回归。原 Windows CI 保留。
+- Svelte/TypeScript 检查、PC build、mobile build、Capacitor sync 和 Android assembleRelease 通过。
+- APK 已使用独立发布密钥签名，apksigner v2/v3 校验通过；不把密钥或密码写入 Git。
+- 移动端21项测试通过，使用真实内存 SQLite，覆盖 CRUD、日期趋势、排期幂等、断网 outbox 保留、
+  同步确认后断线、跨账号隔离、PC v1/v2 ZIP 往返与合成照片哈希。
+- Android 8/11/14/15 真机、真实 AI、真实公网和 Windows 便携包仍待各自验收。
+
+本轮源码结果不替代已发布 v0.4.0 Windows 附件，不自动更新任何运行实例。
+
+窄屏浏览器 smoke：390×844 下注册、资料、导航、每部位6个动作和启动训练弹窗通过，
+没有 JavaScript 异常；这属于浏览器布局检查。Android 15 软件模拟器已尝试启动，但
+当前 WSL 无可用 KVM 权限，系统服务未就绪、安装超时；没有将此计为 APK 运行验收。
+原生 release 编译与签名校验已通过。npm 生产依赖 audit 本轮报告0项已知漏洞；
+这不能替代原生依赖、系统更新和公网安全审计。

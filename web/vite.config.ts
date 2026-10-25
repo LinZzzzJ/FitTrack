@@ -1,9 +1,9 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [svelte()],
   build: {
-    outDir: "../src/fittrack/static",
+    outDir: mode === "mobile" ? "mobile-dist" : "../src/fittrack/static",
     emptyOutDir: true,
     rollupOptions: {
       output: {
@@ -18,4 +18,4 @@ export default defineConfig({
   server: {
     proxy: { "/api": { target: "http://127.0.0.1:8788", changeOrigin: true } },
   },
-});
+}));

@@ -1,3 +1,5 @@
+import { apiOrigin, authHeader, isLocalMobileMode, isMobile, loadMobileConnection } from "./mobile";
+
 export const API_REVISION = 5;
 export interface VersionInfo {
   version: string;
@@ -15,15 +17,24 @@ export function checkVersion() {
   if (pending) return pending;
   pending = (async () => {
     try {
-      const response = await fetch("/api/version", {
+      await loadMobileConnection();
+      if (isMobile) {
+        compatibility.version = "本地";
+        compatibility.message = "";
+        return;
+      }
+      const response = await fetch(apiOrigin() + "/api/version", {
         credentials: "same-origin",
         cache: "no-store",
+        headers: authHeader(),
       });
       if (!response.ok) throw new Error("后台版本无法核对");
       const info: VersionInfo = await response.json();
       compatibility.version = info.version;
+      const compatibleRevision =
+        info.api_revision === API_REVISION;
       compatibility.message =
-        info.api_revision !== API_REVISION ||
+        !compatibleRevision ||
         info.restart_required ||
         ![
           "diet_history",

@@ -8,16 +8,28 @@
     ChartNoAxesCombined,
     LoaderCircle,
   } from "@lucide/svelte";
+  import { nativeRequest } from "../lib/mobile-network";
   import { api } from "../lib/api";
   import { init, app, notify } from "../lib/state.svelte";
+  import { chooseLocalMode, isMobile, saveMobileConnection, normalizeServer } from "../lib/mobile";
   let registering = $state(false),
     username = $state(""),
     password = $state(""),
-    pending = $state(false);
+    pending = $state(false),
+    serverAddress = $state(""),
+    pairCode = $state("");
   async function submit(event: SubmitEvent) {
     event.preventDefault();
     pending = true;
     try {
+      if (isMobile) {
+        const base = normalizeServer(serverAddress);
+        if (!/^\d{8}$/.test(pairCode.trim())) throw new Error("请输入 PC 网页生成的8位配对码");
+        const payload = await nativeRequest("POST",base+"/api/mobile/pair/redeem",{code:pairCode.trim()},{"Content-Type":"application/json"});
+        await saveMobileConnection(base, payload.token, payload.user);
+        await init();
+        return;
+      }
       await api.post(`/auth/${registering ? "register" : "login"}`, {
         username,
         password,
@@ -29,6 +41,10 @@
     } finally {
       pending = false;
     }
+  }
+  async function useLocalMode() {
+    await chooseLocalMode();
+    await init();
   }
 </script>
 
@@ -62,7 +78,7 @@
         <div class="floating-pill">每一天，都值得记录</div>
       </div>
     </div>
-    <div class="auth-footnote">你的记录，保存在这台电脑。</div>
+    <div class="auth-footnote">{isMobile ? "选择本机记录，或连接自己的服务器。" : "你的记录，保存在这台电脑。"}</div>
   </section>
   <section class="auth-form">
     <div class="auth-form-inner">
@@ -73,7 +89,30 @@
           ? "创建独立账号，让每一次记录都有归属。"
           : "今天也为自己留一点时间。"}
       </p>
-      <form onsubmit={submit}>
+      {#if isMobile}<form onsubmit={submit}><div class="mobile-pairing-note">
+          <strong>连接已有 FitTrack 服务器</strong>
+          <p>请先在 PC 网页端登录，在设置中生成一次性配对码。配对码 5 分钟内有效。</p>
+        </div><label
+          >服务器地址<input
+            type="url"
+            bind:value={serverAddress}
+            required
+            placeholder="https://fittrack.example.com"
+          /></label
+        ><label
+          >8 位配对码<input
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            bind:value={pairCode}
+            minlength="8"
+            maxlength="8"
+            pattern="[0-9]{8}"
+            required
+            placeholder="例如 12345678"
+          /></label
+        ><button class="primary full" disabled={pending}
+          >{#if pending}<LoaderCircle size={18} class="spin" />{:else}连接服务器<ArrowRight size={18} />{/if}</button
+        ></form><button type="button" class="secondary full" onclick={() => void useLocalMode()}>仅在本机使用</button>{:else}<form onsubmit={submit}>
         <label
           >用户名<input
             autocomplete="username"
@@ -102,8 +141,8 @@
               size={18}
             />{/if}</button
         >
-      </form>
-      <div class="auth-switch">
+      </form>{/if}
+      {#if !isMobile}<div class="auth-switch">
         {registering ? "已有账号？" : "第一次使用？"}<button
           class="text-button"
           onclick={() => {
@@ -112,7 +151,7 @@
           }}>{registering ? "去登录" : "创建账号"}</button
         >
       </div>
-      <p class="secure-note">
+      {/if}<p class="secure-note">
         <LockKeyhole size={15} />独立账号 · 本地存储 · 在线 AI 辅助
       </p>
     </div>

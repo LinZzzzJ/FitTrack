@@ -46,6 +46,15 @@
 
 ## 源码迁移与运行数据迁移分别处理
 
+### Windows/PC 与 Android
+
+Android 使用自己的本地数据库，不直接打开 Windows 正在使用的 SQLite 文件。跨平台交换只通过健康
+ZIP v1/v2 或服务器同步接口完成。Android 专属的配对令牌、Keystore 密钥、动画质量和通知权限不写入
+健康 ZIP；健康记录、图片、训练模板、排期和任务状态仍按现有白名单导入。
+
+动作目录是独立的版本化只读资源。历史训练记录继续按动作名称读取，因此旧 Windows 版本不需要理解
+动画字段；没有对应资源时显示静态动作卡片。未授权的第三方媒体不得写入 APK、服务器或备份。
+
 Git 迁移的是受版本管理的源码与文档，不带账号库、Key、照片和运行状态。两台电脑分别克隆后，`commit` 保存本机版本，`push/pull` 同步已提交源码；旧 Release 不会随 `main` 自动变化。
 
 数据迁移有两种不同需求：
@@ -75,3 +84,7 @@ Git 迁移的是受版本管理的源码与文档，不带账号库、Key、照�
 | 平台与 UI | 能力与实际一致、浏览器/无桌面行为、桌面与窄窗口、Windows EXE 回归 |
 
 v0.4.0 Windows 发行有 129 项后端测试及成品验收。最近一次已记录的 `main` Linux Python 3.14.4 检查在排除 `test_portable.py` 后 131 项通过、2 项跳过；本轮 WSL 因缺少 `ensurepip` 未复跑。完整 Linux 测试中的 Windows API 失败不计为 Linux 功能回归。Linux 启动器、管理操作、浏览器全流程、整根迁移和新功能便携成品仍未验收。详细范围见 [ACCEPTANCE](ACCEPTANCE.md) 与 [open_questions](open_questions.md)。
+
+2026-10-25 Android/PC 适配检查补充：本轮隔离 Linux 非便携测试为149项通过、2项Windows环境跳过，
+新增21项移动端数据/SQLite测试和健康ZIP双向验证。旧的131项记录属于此前提交；
+新增Android编译与签名结果不能替代Windows原生启动器或真机验收，详见 [Android](android.md)。

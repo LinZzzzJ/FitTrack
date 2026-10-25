@@ -5,7 +5,7 @@
 ## 通用规则
 
 - 同源 `/api`；日期 `YYYY-MM-DD`，业务“今天”使用上海时区；kg、cm、g、分钟和 kcal 见字段后缀。
-- JSON 输入继承 `Model`，`extra=forbid`、不接受 NaN/Infinity。前端请求通过 `x-fittrack-api: 3` 表明接口修订号；编辑时不要把响应中的 `totals`、`created_at` 等只读字段原样回传。
+- JSON 输入继承 `Model`，`extra=forbid`、不接受 NaN/Infinity。普通网页写入前通过 `/api/version` 核对修订号与能力；可选 `x-fittrack-api` 头必须与当前后台修订号 5 一致；编辑时不要把响应中的 `totals`、`created_at` 等只读字段原样回传。
 - 账号凭 `fittrack_session` Cookie 验证，HttpOnly、SameSite=strict、14 天；`server` 模式另加 Secure。退出使服务端会话失效。
 - 登录、注册及版本接口不要求已有会话；其余 `/api` 按当前用户检查归属。Host/Origin 检查仍适用于免登录接口。
 - 返回 `detail` 错误信息；401 未登录、403 权限/访问保护、404 不存在或越权资源、409 冲突/运行任务不可删除、422 模型字段校验失败。业务 `ValueError` 为 400；不要假设全部不兼容错误均为 422。
@@ -105,6 +105,28 @@ CSV 导入先由用户映射日期、训练名、动作、组数、次数、重�
 `/api/weekly-review` 重要字段有 `week_start`、`week_end`、`week_number`、`earliest_generation_date`、`today`、`closed`、`completed_days`、`missing_dates`、`can_generate`、`reason`、`available_weeks`、`statistics`、`report`、`active_job`、`latest_job`；`missing_dates` 的各项包含日期和缺失原因，完整返回以 `coaching.weekly_status` 为准。
 
 SSE 先发送 `event: ready`，随后 JSON 通知包含 `type=job/job_deleted/storage` 等相应事件，15 秒心跳。它用于触发刷新；不能把事件流当作可靠完整事务日志。
+
+## Android 移动端配对与同步
+
+| 接口 | 合约 |
+|---|---|
+| `POST /api/mobile/pair/create` | 当前已登录账号生成一次性 8 位配对码，5 分钟有效；只返回配对码和有效期，不返回密码或 AI Key |
+| `POST /api/mobile/pair/redeem` | `{code}`；配对码只能兑换一次，成功后返回短期 Bearer 会话令牌和账号摘要 |
+| `GET /api/mobile/devices`、`DELETE /api/mobile/devices/{id}` | 当前账号设备列表与撤销，不允许越权 |
+| `POST /api/mobile/refresh` | 轮换当前设备令牌，旧令牌失效 |
+| `GET /api/mobile/sync?cursor=&limit=` | protocol=1，按账号修订号分页读取健康记录与删除标记 |
+| `POST /api/mobile/sync` | 最多200项 `{id,table,key,base,row}`；事务合并、幂等回执与冲突副本 |
+| `GET /api/mobile/conflicts` | 当前账号的双方冲突副本，独立于健康 ZIP |
+| `PUT /api/mobile/images/{sha}` | 当前账号上传原图字节，最多12 MiB、验证 SHA-256 |
+| `GET /api/exercise-catalog` | 返回版本化的内置动作目录；动作媒体引用是受控的相对资源标识，不接受客户端 URL |
+
+服务器模式默认禁止 `/api/auth/register`，部署者可用 `--allow-registration` 显式开启；服务器登录与配对兑换有应用级限流，本机注册不变。
+
+移动端请求使用 `Authorization: Bearer <token>`，网页端继续使用 HttpOnly Cookie。移动端首版仅允许 HTTPS 服务器；服务器仅允许
+`capacitor://localhost`、`http://localhost` 和 `https://localhost` 作为移动 WebView 来源，CORS 不允许通配符。
+配对令牌和设备设置不进入健康 ZIP；健康 ZIP v1/v2 仍是 Windows/PC 与 Android 的跨平台交换格式。PC API 保持修订号5，移动同步单独使用协议1。
+
+移动端数据/模式/文件映射和安全边界见 [Android](android.md)。
 
 ## 存储管理和运行模式接口
 

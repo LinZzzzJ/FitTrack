@@ -39,3 +39,15 @@ SQLite初期适用于单机部署，数据库应位于同机持久磁盘。较�
 FitTrack保留后端，以复用现有存储、计算、AI校验及任务系统。本机与未来服务器模式的主要区别是后端运行位置及管理权限。
 
 参考：[FastAPI部署概念](https://fastapi.tiangolo.com/deployment/concepts/) · [SQLite WAL](https://www.sqlite.org/wal.html) · [BrushGraft](https://github.com/zeroherolin/brushgraft)。
+
+## Android 客户端适配
+
+当前源码另包含 Android 配对、设备会话、增量同步和冲突保留。PC 浏览器继续通过同源 Cookie 访问，
+Android 使用 HTTPS 与设备 Bearer 令牌。反向代理应原样转发 Authorization 和 `/api/mobile/*`，
+不自行增加通配符 CORS；手机 native HTTPS 客户端不依赖浏览器 Cookie。
+后台保持单进程与同机 SQLite；不得直接增加多 worker 运行共享队列。
+
+服务器默认关闭新账号注册，登录和配对已有应用级限流。需要开放注册时由部署者显式传入
+`--allow-registration`，并配置账号配额。正式开放公网前仍需认证网关或补充代理限流，
+限制上传体积、配置可信代理地址、备份和演练回滚。配对限流、账号归属、ZIP 校验和 TLS 校验
+已有源码测试，不等于公网部署或渗透测试验收。详见 [Android 指南](android.md)。

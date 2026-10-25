@@ -188,3 +188,11 @@ prepare_release.ps1下载固定官方ZIP并核对SHA-256，不注册全局Python
 `paths.private` 在 Windows 设置 ACL，非 Windows 使用 chmod；`config.lock_home` 已有 msvcrt/flock 分支。相对工作区映射和普通 Python 业务提供移植基础，但源码子进程解释器、原生目录选择、快捷方式、文件浏览、冻结环境及部分测试仍依赖 Windows。`RuntimeConfig.capabilities` 只按 local/server 开关，尚未完整反映 OS 差异；需要未来适配与双平台验收。
 
 当前与早期设计的主要演进：单库/公共配置 → 控制库与个人库/个人凭据；当天饮食列表 → 长期保存的周视图；普通照片包装提示 → 独立标签草稿和后端换算；仅源码启动 → Windows完整便携包。尚未实现的服务器上线、Linux完整运行和规模化队列应保留为后续方向，不能写成当前交付。
+
+## Android 服务适配
+
+Android 复用 Svelte 页面，通过移动服务门面读取 SQLCipher journal；原生桥接负责 Keystore、
+受限 HTTPS 和文件分享。Python 模型及目录导出为共享契约，JSON 校验器在构建前预编译。
+移动记录通过严格健康 ZIP v1/v2 映射回 PC 格式；同步元数据独立保存，服务器通过
+个人工作区内的修订记录、回执和冲突副本适配已有 PC 写入。业务日期与确定性公式保持一致。
+详见 [Android 设计与验证边界](android.md)。

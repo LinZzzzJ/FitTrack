@@ -131,6 +131,9 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
     parser.add_argument("--public-url", default="")
+    parser.add_argument(
+        "--allow-registration", action="store_true", help="显式允许服务器新账号注册（默认关闭）"
+    )
     parser.add_argument("--allowed-provider", action="append")
     parser.add_argument("--trusted-proxy", default="127.0.0.1")
     parser.add_argument("--import-legacy", type=Path)
@@ -181,7 +184,10 @@ def main():
         from fittrack.runtime import RuntimeConfig
 
         runtime_config = RuntimeConfig(
-            args.mode, args.public_url, args.allowed_provider or ["https://api.deepseek.com"]
+            args.mode,
+            args.public_url,
+            args.allowed_provider or ["https://api.deepseek.com"],
+            args.allow_registration,
         )
         hub = WorkspaceHub(paths)
         vault = CredentialStore(hub.control, paths, args.mode, runtime_config.providers)

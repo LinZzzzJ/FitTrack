@@ -10,6 +10,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import HTTPConnection
+from starlette.middleware.cors import CORSMiddleware
+
+from fittrack.mobile_auth import NATIVE_ORIGINS, PairingLimiter
 
 from fittrack.events import EventBus
 from fittrack.jobs import JobRunner
@@ -62,7 +65,16 @@ class Guard:
             }
             if self.public_url and origin.rstrip("/") != self.public_url:
                 same = False
-            if not same and not development:
+            native_origin = origin in NATIVE_ORIGINS and not same
+            if (
+                native_origin
+                and path not in {"/api/mobile/pair/redeem", "/api/version", "/api/exercise-catalog"}
+                and not connection.headers.get("authorization", "").startswith("Bearer ")
+            ):
+                return await JSONResponse({"detail": "移动来源必须使用设备令牌"}, status_code=403)(
+                    scope, receive, send
+                )
+            if not same and not development and not native_origin:
                 return await JSONResponse({"detail": "请求来源不允许"}, status_code=403)(
                     scope, receive, send
                 )
@@ -155,6 +167,8 @@ def create_app(store, settings, *, ai=None, allowed_hosts=None, runtime_config=N
         openapi_url=None,
     )
     app.state.build_info = BuildInfo()
+    app.state.pairing_limiter = PairingLimiter()
+    app.state.auth_limiter = PairingLimiter("登录尝试过于频繁，请稍后再试")
     app.state.store, app.state.settings, app.state.bus, app.state.runner = (
         store,
         settings,
@@ -169,6 +183,14 @@ def create_app(store, settings, *, ai=None, allowed_hosts=None, runtime_config=N
         development=not runtime or runtime.config.mode == "local",
         public_url=runtime.config.public_url if runtime else "",
         build_info=app.state.build_info,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["capacitor://localhost", "http://localhost", "https://localhost"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Fittrack-Api"],
+        expose_headers=["Content-Type"],
     )
 
     @app.exception_handler(KeyError)
@@ -193,6 +215,9 @@ def create_app(store, settings, *, ai=None, allowed_hosts=None, runtime_config=N
         return JSONResponse({"detail": "请检查字段：" + "、".join(fields)}, status_code=422)
 
     app.include_router(router())
+    from fittrack.mobile_sync import router as mobile_sync_router
+
+    app.include_router(mobile_sync_router())
     if managed:
         from fittrack.management_routes import local_router, management_router
 

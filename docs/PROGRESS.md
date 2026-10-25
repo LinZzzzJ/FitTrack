@@ -37,3 +37,12 @@
 本轮只改Markdown，不修改应用、测试、脚本、依赖锁、CI、数据库结构及发布包，不操作正式服务。Windows复验129项pytest通过、Ruff通过、Svelte检查0错误0警告、生产构建成功。15份新增/更新文档的133个相对链接与大小写检查通过，101个已跟踪非Markdown文件哈希不变；敏感形态扫描未发现命中，并人工复核公开内容。README及三份核心文档通过GitHub Markdown渲染检查，详情见[验收](ACCEPTANCE.md)。
 
 只读识别到Linux/WSL移植边界，没有安装Linux工具链或运行Linux全套验证。后续实际平台适配与公网部署仍未交付。
+## v0.4.0-android.1 · Android/PC 兼容适配预发布
+
+- 新增 Capacitor Android、Keystore/SQLCipher、本地服务、PC 双向健康 ZIP v1/v2 与原图哈希校验。
+- 新增 48 个原创动作 SVG 动画；保留 FitTrack 界面、模板、排期、CSV/JSON/二维码功能。
+- 新增一次性配对、设备撤销/轮换、服务器注册默认关闭及登录限流、离线 outbox、增量拉取、三方字段合并和冲突副本。
+- 保持 PC API 5/健康 ZIP v2，不向旧导入器加入未知字段；移动同步单独使用 protocol=1。
+- 已完成 Android release 编译与签名校验；源码/格式验证不等于 Windows 便携包或 Android 真机验收。
+
+详情与边界见 [Android](android.md) 和 [验收](ACCEPTANCE.md)。

@@ -6,6 +6,7 @@ import threading
 from contextlib import contextmanager
 
 from fittrack.paths import write_json
+from fittrack.mobile_auth import device_schema
 from fittrack.store import Store, encode
 
 CONTROL = """
@@ -42,7 +43,7 @@ class ControlStore(Store):
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA busy_timeout=10000")
         self.db.execute("PRAGMA temp_store=MEMORY")
-        self.db.executescript(CONTROL)
+        self.db.executescript(CONTROL + device_schema())
 
     def metadata(self, key, default=None):
         rows = self.rows("SELECT value FROM metadata WHERE key=?", (key,))

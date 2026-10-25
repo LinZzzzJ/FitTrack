@@ -145,3 +145,12 @@ FitTrack/
 Linux/WSL 已做有限源码依赖、测试和前端构建检查，但尚未完成全功能运行验收。Windows 原生目录选择、解释器路径、快捷方式、浏览器和部分测试需要单独适配；不能将 Python/前端可跨平台推导成整个应用已跨平台。
 
 其他知识入口：[接口合约](docs/interfaces.md)、[需求](docs/requirements.md)、[决策](docs/decisions.md)、[开发经验](docs/development_notes.md)、[历史资料范围](docs/history_summary.md)、[待确认问题](docs/open_questions.md)、[验收](docs/ACCEPTANCE.md)和[公网部署路线](docs/WEB_DEPLOYMENT_ASSESSMENT.md)。
+
+## Android
+
+[下载 Android 首个预发布 APK](https://github.com/LinZzzzJ/FitTrack/releases/tag/v0.4.0-android.1)（Android 8+；真机验收待完成）。
+
+Android 源码与签名 APK 构建流程已加入，支持本机记录与连接自己的 HTTPS FitTrack 服务器，
+保留现有 FitTrack 风格。PC/手机通过健康 ZIP v1/v2 双向交换；动作库内置 48 个原创动画示意。
+PC API 与数据格式继续兼容，移动同步单独版本化。使用、签名保管及未验证边界见
+[Android 指南](docs/android.md)。此源码状态不代表旧 v0.4.0 Windows Release 附件已更新。
